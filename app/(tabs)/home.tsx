@@ -16,7 +16,7 @@ import { getTotalShiftTime, getNetOperatingTime, getGrossTime, formatDurationSho
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { operator } = useAuth();
+  const { operator, canonicalWork, mode } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
@@ -28,6 +28,7 @@ export default function HomeScreen() {
   }, []);
 
   if (!operator) return null;
+  if (mode === 'UAT') return <CanonicalHome operatorName={operator.name} work={canonicalWork} colors={c} insets={insets} />;
 
   // Use resumable lookup for active DEUR (finds turnover-pending too)
   const activeDeur = mockRepository.getResumableDeurForOperator(operator.id);
@@ -217,6 +218,13 @@ export default function HomeScreen() {
       )}
     </ScrollView>
   );
+}
+
+function CanonicalHome({operatorName,work,colors:c,insets}:{operatorName:string;work:import('@/lib/canonical/contracts.generated').CanonicalOperatorWork|null;colors:ReturnType<typeof useTheme>['colors'];insets:{top:number;bottom:number}}){
+ return <ScrollView style={[styles.container,{backgroundColor:c.background}]} contentContainerStyle={[styles.content,{paddingTop:spacing.lg+insets.top,paddingBottom:spacing.xxxl+insets.bottom}]}>
+  <View style={styles.header}><View><Text style={[styles.greeting,{color:c.textMuted}]}>Canonical UAT session</Text><Text style={[styles.operatorName,{color:c.textPrimary}]}>{operatorName}</Text></View><View style={[styles.syncBadge,{backgroundColor:c.emerald50}]}><Wifi size={14} color={c.emerald500}/><Text style={[styles.syncText,{color:c.emerald500}]}>Server</Text></View></View>
+  {work?<><Text style={[styles.sectionLabel,{color:c.textMuted}]}>AUTHORIZED CURRENT WORK</Text><Card style={styles.assignmentCard}><Text style={[styles.equipmentName,{color:c.textPrimary}]}>{work.equipment.name}</Text><Text style={[styles.assetNumber,{color:c.textMuted}]}>{work.equipment.assetNumber}</Text><Text style={[styles.detailText,{color:c.textSecondary}]}>{work.rental.rentalNumber}</Text><Text style={[styles.detailText,{color:c.textSecondary}]}>Assignment: {work.assignment.status}</Text>{work.rental.billingMethod?<Text style={[styles.detailText,{color:c.textSecondary}]}>Billing method: {work.rental.billingMethod}</Text>:null}</Card>{work.openDeur?<View style={[styles.deurNumberBanner,{backgroundColor:c.blue600}]}><Text style={[styles.deurNumberLabel,{color:c.blue50}]}>OPEN DEUR · {work.openDeur.workDate}</Text><Text style={[styles.deurNumberValue,{color:c.white}]}>{work.openDeur.deurNumber}</Text></View>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No open DEUR.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Open the Digital DEUR tab to start through the canonical service.</Text></Card>}</>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No authorized active work found.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>The application will not substitute demo fixtures in UAT.</Text></Card>}
+ </ScrollView>;
 }
 
 const styles = StyleSheet.create({
