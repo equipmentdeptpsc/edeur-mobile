@@ -1,14 +1,25 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
 import { mockRepository } from './mockRepository';
 import type { Operator } from './types';
+import type { CanonicalActivity, CanonicalCommandResult, CanonicalOperatorWork } from './canonical/contracts.generated';
+import { mobileRuntime as runtime } from './canonical/runtime';
 
 interface AuthContextValue {
   operator: Operator | null;
+  canonicalWork: CanonicalOperatorWork | null;
   pendingDeurId: string | null;
-  login: (pin: string) => boolean;
+  mode: 'DEMO' | 'UAT';
+  configurationError: string | null;
+  canonicalBusy: boolean;
+  login: (identifier: string, password?: string) => Promise<boolean>;
   loginReliever: (name: string, pin: string, deurId?: string) => boolean;
   loginMainOperator: (pin: string, deurId: string) => boolean;
   resumeDeur: (deurId: string) => boolean;
+  refreshCanonicalWork: () => Promise<boolean>;
+  startCanonicalDeur: (optional?: { openingMeter?: number; shift?: string; operationalRemarks?: string }) => Promise<CanonicalCommandResult>;
+  transitionCanonicalActivity: (activity: CanonicalActivity, reason?: { id: string; label: string; remarks?: string }) => Promise<CanonicalCommandResult>;
+  endCanonicalShift: (evidence?: { closingMeter?: number; closingLocation?: string }) => Promise<CanonicalCommandResult>;
+  submitCanonicalDeur: () => Promise<CanonicalCommandResult>;
   logout: () => void;
 }
 
@@ -18,6 +29,7 @@ const SESSION_KEY = 'erms_operator_session_v1';
 const PENDING_DEUR_KEY = 'erms_pending_deur_v1';
 
 function loadSession(): Operator | null {
+  if (runtime.environment.mode !== 'DEMO') return null;
   try {
     if (typeof localStorage !== 'undefined') {
       const raw = localStorage.getItem(SESSION_KEY);
@@ -54,6 +66,7 @@ function clearSession(): void {
 }
 
 function loadPendingDeurId(): string | null {
+  if (runtime.environment.mode !== 'DEMO') return null;
   try {
     if (typeof localStorage !== 'undefined') {
       return localStorage.getItem(PENDING_DEUR_KEY);
@@ -80,9 +93,25 @@ function clearPendingDeurId(): void {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [operator, setOperator] = useState<Operator | null>(loadSession());
+  const [canonicalWork, setCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [pendingDeurId, setPendingDeurId] = useState<string | null>(loadPendingDeurId());
+  const [canonicalBusy, setCanonicalBusy] = useState(false);
+  const canonicalBusyRef = useRef(false);
+  const commandIds = useRef(new Map<string, string>());
 
-  const login = (pin: string) => {
+  const login = async (identifier: string, password?: string) => {
+    if (runtime.environment.mode === 'UAT') {
+      if (runtime.configurationError || !runtime.authentication || !runtime.workRepository || !password) return false;
+      try {
+        const authenticated = await runtime.authentication.signIn(identifier, password);
+        const work = await runtime.workRepository.getCurrentWork(authenticated.identity);
+        setCanonicalWork(work);
+        setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: identifier, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false });
+        setPendingDeurId(work?.openDeur?.id ?? null);
+        return true;
+      } catch { return false; }
+    }
+    const pin = identifier;
     const op = mockRepository.authenticateByPin(pin);
     if (!op) return false;
     setOperator(op);
@@ -100,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginReliever = (name: string, pin: string, deurId?: string) => {
+    if (runtime.environment.mode !== 'DEMO') return false;
     const op = mockRepository.authenticateReliever(name, pin);
     if (!op) return false;
     // Mark DEUR as pending turnover — do NOT create segment yet
@@ -121,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginMainOperator = (pin: string, deurId: string) => {
+    if (runtime.environment.mode !== 'DEMO') return false;
     const op = mockRepository.authenticateByPin(pin);
     if (!op) return false;
     // Mark DEUR as pending turnover
@@ -133,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resumeDeur = (deurId: string) => {
+    if (runtime.environment.mode !== 'DEMO') return false;
     if (!operator) return false;
     const deur = mockRepository.getDeurById(deurId);
     if (!deur || deur.status !== 'Active') return false;
@@ -143,13 +175,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    if (runtime.environment.mode === 'UAT') void runtime.authentication?.signOut();
     setOperator(null);
+    setCanonicalWork(null);
     setPendingDeurId(null);
     clearSession();
   };
 
+  const failure = (code: string): CanonicalCommandResult => ({ success: false, code });
+  const refreshCanonicalWork = async () => {
+    if (runtime.environment.mode !== 'UAT' || !canonicalWork || !runtime.workRepository) return false;
+    try {
+      const work = await runtime.workRepository.getCurrentWork(canonicalWork.identity);
+      setCanonicalWork(work);
+      setPendingDeurId(work?.openDeur?.id ?? null);
+      return true;
+    } catch { return false; }
+  };
+  const runCanonical = async (key: string, action: (identity: string) => Promise<CanonicalCommandResult>) => {
+    if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
+    let identity = commandIds.current.get(key);
+    if (!identity) { identity = crypto.randomUUID(); commandIds.current.set(key, identity); }
+    canonicalBusyRef.current = true;
+    setCanonicalBusy(true);
+    try {
+      const result = await action(identity);
+      if (result.success || !result.retryable) commandIds.current.delete(key);
+      if (result.success || result.refreshRequired) await refreshCanonicalWork();
+      return result;
+    } finally { canonicalBusyRef.current = false; setCanonicalBusy(false); }
+  };
+  const startCanonicalDeur: AuthContextValue['startCanonicalDeur'] = async (optional = {}) => {
+    if (!canonicalWork || canonicalWork.openDeur || !runtime.commands) return failure(canonicalWork?.openDeur ? 'PRIOR_OPEN_DEUR' : 'NO_AUTHORIZED_WORK');
+    const draftKey = 'start-draft';
+    let draftId = commandIds.current.get(draftKey);
+    if (!draftId) { draftId = crypto.randomUUID(); commandIds.current.set(draftKey, draftId); }
+    const result = await runCanonical('start', (identity) => runtime.commands!.start(canonicalWork, identity, draftId!, optional));
+    if (result.success || !result.retryable) commandIds.current.delete(draftKey);
+    return result;
+  };
+  const transitionCanonicalActivity: AuthContextValue['transitionCanonicalActivity'] = async (activity, reason) => {
+    const deur = canonicalWork?.openDeur;
+    if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    return runCanonical(`transition:${activity}`, (identity) => runtime.commands!.transition(canonicalWork, deur.id, deur.rowVersion, activity, identity, reason));
+  };
+  const endCanonicalShift: AuthContextValue['endCanonicalShift'] = async (evidence = {}) => {
+    const deur = canonicalWork?.openDeur;
+    if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    return runCanonical('end-shift', (identity) => runtime.commands!.endShift(canonicalWork, deur.id, deur.rowVersion, identity, evidence));
+  };
+  const submitCanonicalDeur = async () => {
+    const deur = canonicalWork?.openDeur;
+    if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    return runCanonical('submit', (identity) => runtime.commands!.submit(canonicalWork, deur.id, deur.rowVersion, identity));
+  };
+
   return (
-    <AuthContext.Provider value={{ operator, pendingDeurId, login, loginReliever, loginMainOperator, resumeDeur, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, logout }}>
       {children}
     </AuthContext.Provider>
   );

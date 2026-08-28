@@ -16,6 +16,7 @@ import { useConnectivity } from '@/lib/useConnectivity';
 import { spacing, radius } from '@/lib/theme';
 import { formatDuration, getActivityColor, getNetOperatingTime, getTotalShiftTime, getStatusVariant } from '@/lib/utils';
 import type { ThemeColors } from '@/lib/theme';
+import { CanonicalDeurOperatorPanel } from '@/components/CanonicalDeurOperatorPanel';
 
 const ACTS: { type: ActivityType; color: string; bgKey: 'emerald50' | 'amber100' | 'red50' | 'indigo50' }[] = [
   { type: 'Operating', color: '#10b981', bgKey: 'emerald50' },
@@ -26,7 +27,7 @@ const ACTS: { type: ActivityType; color: string; bgKey: 'emerald50' | 'amber100'
 
 export default function DeurScreen() {
   const router = useRouter();
-  const { operator, pendingDeurId, resumeDeur } = useAuth();
+  const { operator, pendingDeurId, resumeDeur, mode } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [deur, setDeur] = useState<Deur | null>(null);
@@ -56,6 +57,7 @@ export default function DeurScreen() {
 
   useEffect(() => { refreshDeur(); }, [refreshDeur]);
   if (!operator) return null;
+  if (mode === 'UAT') return <CanonicalDeurOperatorPanel />;
 
   // Resolve assignment/rental/equipment from the DEUR first, then fallback to operator's own
   const lookupDeur = deur;

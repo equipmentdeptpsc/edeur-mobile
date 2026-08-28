@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, Image } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Image, TextInput, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/lib/useTheme';
@@ -9,23 +9,24 @@ import { spacing, radius } from '@/lib/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, mode, configurationError } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState('');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError('');
-    if (!pin.trim()) { setError('Please enter your PIN.'); return; }
+    if (configurationError) { setError(configurationError); return; }
+    if (mode === 'DEMO' && !pin.trim()) { setError('Please enter your PIN.'); return; }
+    if (mode === 'UAT' && (!identifier.trim() || !password)) { setError('Enter your username/email and password.'); return; }
     setLoading(true);
-    setTimeout(() => {
-      const success = login(pin.trim());
-      if (!success) { setError('Invalid PIN. Please try again.'); setPin(''); setLoading(false); return; }
-      setLoading(false);
-      router.replace('/(tabs)/home');
-    }, 600);
+    const success = await login(mode === 'UAT' ? identifier.trim() : pin.trim(), mode === 'UAT' ? password : undefined);
+    if (!success) { setError(mode === 'UAT' ? 'Canonical sign-in failed. Verify credentials and UAT configuration.' : 'Invalid PIN. Please try again.'); setPin(''); setPassword(''); setLoading(false); return; }
+    setLoading(false); router.replace('/(tabs)/home');
   };
 
   return (
@@ -44,21 +45,25 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.form}>
-            <Text style={[styles.label, { color: c.textPrimary }]}>Operator Access</Text>
-            <PinPad
+            <Text style={[styles.label, { color: c.textPrimary }]}>{mode === 'UAT' ? 'Canonical Operator Access' : 'Demo Operator Access'}</Text>
+            {mode === 'UAT' ? <>
+              <TextInput accessibilityLabel="Username or email" autoCapitalize="none" style={[styles.remoteInput, { color: c.textPrimary, borderColor: c.inputBorder, backgroundColor: c.inputBg }]} value={identifier} onChangeText={setIdentifier} placeholder="Username or email" placeholderTextColor={c.textMuted} />
+              <TextInput accessibilityLabel="Password" autoCapitalize="none" secureTextEntry style={[styles.remoteInput, { color: c.textPrimary, borderColor: c.inputBorder, backgroundColor: c.inputBg }]} value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={c.textMuted} onSubmitEditing={() => void handleLogin()} />
+              <TouchableOpacity accessibilityRole="button" style={[styles.remoteButton, { backgroundColor: c.blue600 }]} onPress={() => void handleLogin()} disabled={loading}><Text style={styles.remoteButtonText}>{loading ? 'Signing In…' : 'Sign In'}</Text></TouchableOpacity>
+            </> : <PinPad
               value={pin}
               onChange={setPin}
               maxLength={4}
-              onSubmit={handleLogin}
+              onSubmit={() => void handleLogin()}
               submitLabel="Sign In"
               loading={loading}
-            />
+            />}
             {error ? <Text style={[styles.errorText, { color: c.red500 }]}>{error}</Text> : null}
-            <View style={[styles.hintContainer, { backgroundColor: c.blue50 }]}>
+            {mode === 'DEMO' ? <View style={[styles.hintContainer, { backgroundColor: c.blue50 }]}>
               <Text style={[styles.hintText, { color: c.blue600 }]}>
                 Demo PINs: 1234 (Juan), 5678 (Richard), 9999 (Pedro) • Reliever PIN: 1234
               </Text>
-            </View>
+            </View> : null}
           </View>
 
           <View style={styles.footer}>
@@ -84,6 +89,9 @@ const styles = StyleSheet.create({
   errorText: { fontFamily: 'Manrope-Medium', fontSize: 13, textAlign: 'center' },
   hintContainer: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: radius.sm },
   hintText: { fontFamily: 'Manrope-Medium', fontSize: 12 },
+  remoteInput: { width: '100%', borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Manrope-Medium', fontSize: 14 },
+  remoteButton: { width: '100%', paddingVertical: 13, borderRadius: radius.sm, alignItems: 'center' },
+  remoteButtonText: { color: '#fff', fontFamily: 'Manrope-Bold', fontSize: 14 },
   footer: { alignItems: 'center', gap: 4 },
   footerText: { fontFamily: 'Manrope-Regular', fontSize: 11, textAlign: 'center' },
 });
