@@ -3,6 +3,7 @@ import { mockRepository } from './mockRepository';
 import type { Operator } from './types';
 import type { CanonicalActivity, CanonicalCommandResult, CanonicalOperatorWork } from './canonical/contracts.generated';
 import { mobileRuntime as runtime } from './canonical/runtime';
+import { CanonicalAuthenticationError } from './canonical/authentication';
 
 interface AuthContextValue {
   operator: Operator | null;
@@ -11,6 +12,7 @@ interface AuthContextValue {
   mode: 'DEMO' | 'UAT';
   configurationError: string | null;
   canonicalBusy: boolean;
+  getLoginError: () => string | null;
   login: (identifier: string, password?: string) => Promise<boolean>;
   loginReliever: (name: string, pin: string, deurId?: string) => boolean;
   loginMainOperator: (pin: string, deurId: string) => boolean;
@@ -96,10 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [canonicalWork, setCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [pendingDeurId, setPendingDeurId] = useState<string | null>(loadPendingDeurId());
   const [canonicalBusy, setCanonicalBusy] = useState(false);
+  const loginErrorRef = useRef<string | null>(null);
   const canonicalBusyRef = useRef(false);
   const commandIds = useRef(new Map<string, string>());
 
   const login = async (identifier: string, password?: string) => {
+    loginErrorRef.current=null;
     if (runtime.environment.mode === 'UAT') {
       if (runtime.configurationError || !runtime.authentication || !runtime.workRepository || !password) return false;
       try {
@@ -109,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: identifier, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false });
         setPendingDeurId(work?.openDeur?.id ?? null);
         return true;
-      } catch { return false; }
+      } catch(error) { loginErrorRef.current=error instanceof CanonicalAuthenticationError?error.message:'Canonical sign-in failed.';return false; }
     }
     const pin = identifier;
     const op = mockRepository.authenticateByPin(pin);
@@ -206,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally { canonicalBusyRef.current = false; setCanonicalBusy(false); }
   };
   const startCanonicalDeur: AuthContextValue['startCanonicalDeur'] = async (optional = {}) => {
-    if (!canonicalWork || canonicalWork.openDeur || !runtime.commands) return failure(canonicalWork?.openDeur ? 'PRIOR_OPEN_DEUR' : 'NO_AUTHORIZED_WORK');
+    if (!canonicalWork || canonicalWork.openDeur || canonicalWork.dailyDeur || !runtime.commands) return failure(canonicalWork?.openDeur ? 'PRIOR_OPEN_DEUR' : canonicalWork?.dailyDeur ? 'DAILY_DEUR_EXISTS' : 'NO_AUTHORIZED_WORK');
     const draftKey = 'start-draft';
     let draftId = commandIds.current.get(draftKey);
     if (!draftId) { draftId = crypto.randomUUID(); commandIds.current.set(draftKey, draftId); }
@@ -231,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ operator, canonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, logout }}>
       {children}
     </AuthContext.Provider>
   );

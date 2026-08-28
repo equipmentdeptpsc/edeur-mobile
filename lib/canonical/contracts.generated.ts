@@ -31,6 +31,7 @@ export interface CanonicalOperatorWork {
   rental: { id: string; rentalNumber: string; status: string; billingMethod?: string };
   rentalLine: { id: string; status: string; operationalMetadata: Record<string, unknown> };
   openDeur?: CanonicalOpenDeur;
+  dailyDeur?: CanonicalOpenDeur;
 }
 
 export interface CanonicalCommandIdentity {

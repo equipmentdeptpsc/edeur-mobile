@@ -9,7 +9,7 @@ import { spacing, radius } from '@/lib/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, mode, configurationError } = useAuth();
+  const { login, getLoginError, mode, configurationError } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState('');
@@ -25,7 +25,7 @@ export default function LoginScreen() {
     if (mode === 'UAT' && (!identifier.trim() || !password)) { setError('Enter your username/email and password.'); return; }
     setLoading(true);
     const success = await login(mode === 'UAT' ? identifier.trim() : pin.trim(), mode === 'UAT' ? password : undefined);
-    if (!success) { setError(mode === 'UAT' ? 'Canonical sign-in failed. Verify credentials and UAT configuration.' : 'Invalid PIN. Please try again.'); setPin(''); setPassword(''); setLoading(false); return; }
+    if (!success) { setError(mode === 'UAT' ? (getLoginError() ?? 'Canonical sign-in failed.') : 'Invalid PIN. Please try again.'); setPin(''); setPassword(''); setLoading(false); return; }
     setLoading(false); router.replace('/(tabs)/home');
   };
 
