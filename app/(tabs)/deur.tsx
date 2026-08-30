@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Menu as MenuIcon, Square, Users, Gauge, TriangleAlert as AlertTriangle, Navigation, Fuel } from 'lucide-react-native';
@@ -56,6 +56,7 @@ export default function DeurScreen() {
   }, [operator]);
 
   useEffect(() => { refreshDeur(); }, [refreshDeur]);
+  if (operator === undefined) return <View style={[styles.center, { backgroundColor: c.background }]}><ActivityIndicator size="large" color={c.blue600} /></View>;
   if (!operator) return <Redirect href="/login" />;
   if (mode === 'UAT') return <CanonicalDeurOperatorPanel />;
 

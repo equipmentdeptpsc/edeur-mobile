@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { mockRepository } from './mockRepository';
 import type { Operator } from './types';
 import type { CanonicalActivity, CanonicalCommandResult, CanonicalOperatorWork } from './canonical/contracts.generated';
@@ -6,7 +6,7 @@ import { mobileRuntime as runtime } from './canonical/runtime';
 import { CanonicalAuthenticationError } from './canonical/authentication';
 
 interface AuthContextValue {
-  operator: Operator | null;
+  operator: Operator | null | undefined;
   canonicalWork: CanonicalOperatorWork | null;
   canonicalWorks: CanonicalOperatorWork[];
   selectedCanonicalWork: CanonicalOperatorWork | null;
@@ -97,7 +97,7 @@ function clearPendingDeurId(): void {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [operator, setOperator] = useState<Operator | null>(loadSession());
+  const [operator, setOperator] = useState<Operator | null | undefined>(runtime.environment.mode === 'UAT' ? undefined : loadSession());
   const [canonicalWork, setCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [canonicalWorks, setCanonicalWorks] = useState<CanonicalOperatorWork[]>([]);
   const [selectedCanonicalWork, setSelectedCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
@@ -107,16 +107,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canonicalBusyRef = useRef(false);
   const commandIds = useRef(new Map<string, string>());
 
+  const applyCanonicalSession = async (authenticated: Awaited<ReturnType<NonNullable<typeof runtime.authentication>['restoreSession']>>) => {
+    if (!authenticated || !runtime.workRepository) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); return false; }
+    const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(authenticated.identity) : await runtime.workRepository.getCurrentWork(authenticated.identity).then(value=>value?[value]:[]);
+    const work = works.length===1?works[0]:null; setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work); setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: authenticated.session.user.email ?? authenticated.identity.authUserId, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false }); setPendingDeurId(work?.openDeur?.id ?? null); return true;
+  };
+
+  useEffect(() => { if (runtime.environment.mode !== 'UAT' || !runtime.authentication) return; void runtime.authentication.restoreSession().then((session) => applyCanonicalSession(session).catch(() => { setOperator(null); })); }, []);
+
   const login = async (identifier: string, password?: string) => {
     loginErrorRef.current=null;
     if (runtime.environment.mode === 'UAT') {
       if (runtime.configurationError || !runtime.authentication || !runtime.workRepository || !password) return false;
       try {
         const authenticated = await runtime.authentication.signIn(identifier, password);
-        const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(authenticated.identity) : await runtime.workRepository.getCurrentWork(authenticated.identity).then(value=>value?[value]:[]); const work = works.length===1?works[0]:null; setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work);
-        setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: identifier, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false });
-        setPendingDeurId(work?.openDeur?.id ?? null);
-        return true;
+        return await applyCanonicalSession(authenticated);
       } catch(error) { loginErrorRef.current=error instanceof CanonicalAuthenticationError?error.message:'Canonical sign-in failed.';return false; }
     }
     const pin = identifier;

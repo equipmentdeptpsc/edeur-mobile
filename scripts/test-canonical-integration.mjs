@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 let passed=0,failed=0;const check=(condition,label)=>{if(condition){passed++;console.log(`  PASS: ${label}`);}else{failed++;console.error(`  FAIL: ${label}`);}};
 const read=(path)=>readFileSync(path,'utf8');
 const environment=read('lib/canonical/environment.ts');
+const client=read('lib/canonical/client.ts');
+const authentication=read('lib/canonical/authentication.ts');
 const auth=read('lib/canonical/authentication.ts');
 const selector=read('lib/repositories/selectOperatorWorkRepository.ts');
 const work=read('lib/repositories/SupabaseOperatorWorkRepository.ts');
@@ -30,6 +32,9 @@ check(work.includes("text(row,'status')==='Draft'||text(row,'status')==='In Prog
 check(work.includes("from('deur_events')")&&work.includes(".eq('is_open',true)")&&work.includes('activeActivity'),'current activity is reconciled from the canonical event projection');
 check(work.includes('for(const work of works)')&&work.includes('Canonical active activity projection is ambiguous.'),'multi-work projection hydrates and fail-closes active activity state');
 check(deurScreen.includes('Redirect')&&deurScreen.includes('if (!operator) return <Redirect href="/login" />;'),'unauthenticated DEUR route fails closed to login instead of rendering blank');
+check(client.includes('persistSession: true'),'UAT Supabase session persistence is enabled');
+check(authentication.includes('getSession()')&&authentication.includes('restoreSession'),'UAT Supabase session restoration resolves canonical identity');
+check(authContext.includes("runtime.environment.mode === 'UAT' ? undefined")&&authContext.includes('applyCanonicalSession'),'auth initialization distinguishes loading from unauthenticated');
 const startBody=commands.slice(commands.indexOf(' start('),commands.indexOf(' transition('));
 check(startBody.includes("'command_start_deur_shift'")&&!startBody.includes('workDate')&&!startBody.includes('deurNumber'),'Start invokes canonical command without authoritative workDate/number');
 check(commands.includes("'command_submit_deur'")&&commands.includes('idempotencyKey:identity'),'Submit uses canonical command and stable caller identity');
