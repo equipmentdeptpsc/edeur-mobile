@@ -8,6 +8,9 @@ import { CanonicalAuthenticationError } from './canonical/authentication';
 interface AuthContextValue {
   operator: Operator | null;
   canonicalWork: CanonicalOperatorWork | null;
+  canonicalWorks: CanonicalOperatorWork[];
+  selectedCanonicalWork: CanonicalOperatorWork | null;
+  selectCanonicalWork: (rentalEquipmentLineId: string) => void;
   pendingDeurId: string | null;
   mode: 'DEMO' | 'UAT';
   configurationError: string | null;
@@ -96,6 +99,8 @@ function clearPendingDeurId(): void {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [operator, setOperator] = useState<Operator | null>(loadSession());
   const [canonicalWork, setCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
+  const [canonicalWorks, setCanonicalWorks] = useState<CanonicalOperatorWork[]>([]);
+  const [selectedCanonicalWork, setSelectedCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [pendingDeurId, setPendingDeurId] = useState<string | null>(loadPendingDeurId());
   const [canonicalBusy, setCanonicalBusy] = useState(false);
   const loginErrorRef = useRef<string | null>(null);
@@ -108,8 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (runtime.configurationError || !runtime.authentication || !runtime.workRepository || !password) return false;
       try {
         const authenticated = await runtime.authentication.signIn(identifier, password);
-        const work = await runtime.workRepository.getCurrentWork(authenticated.identity);
-        setCanonicalWork(work);
+        const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(authenticated.identity) : await runtime.workRepository.getCurrentWork(authenticated.identity).then(value=>value?[value]:[]); const work = works.length===1?works[0]:null; setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work);
         setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: identifier, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false });
         setPendingDeurId(work?.openDeur?.id ?? null);
         return true;
@@ -181,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     if (runtime.environment.mode === 'UAT') void runtime.authentication?.signOut();
     setOperator(null);
-    setCanonicalWork(null);
+    setCanonicalWork(null); setCanonicalWorks([]); setSelectedCanonicalWork(null);
     setPendingDeurId(null);
     clearSession();
   };
@@ -190,8 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshCanonicalWork = async () => {
     if (runtime.environment.mode !== 'UAT' || !canonicalWork || !runtime.workRepository) return false;
     try {
-      const work = await runtime.workRepository.getCurrentWork(canonicalWork.identity);
-      setCanonicalWork(work);
+      const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(canonicalWork.identity) : await runtime.workRepository.getCurrentWork(canonicalWork.identity).then(value=>value?[value]:[]); const work = works.find(item=>item.rentalLine.id===canonicalWork.rentalLine.id) ?? (works.length===1?works[0]:null); setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work);
       setPendingDeurId(work?.openDeur?.id ?? null);
       return true;
     } catch { return false; }
@@ -234,8 +237,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return runCanonical('submit', (identity) => runtime.commands!.submit(canonicalWork, deur.id, deur.rowVersion, identity));
   };
 
+  const selectCanonicalWork = (rentalEquipmentLineId:string) => { const work=canonicalWorks.find(item=>item.rentalLine.id===rentalEquipmentLineId) ?? null; setSelectedCanonicalWork(work); setCanonicalWork(work); setPendingDeurId(work?.openDeur?.id ?? null); };
   return (
-    <AuthContext.Provider value={{ operator, canonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, logout }}>
       {children}
     </AuthContext.Provider>
   );

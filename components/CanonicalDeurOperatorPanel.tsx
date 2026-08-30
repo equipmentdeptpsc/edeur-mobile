@@ -12,7 +12,7 @@ const ACTIVITIES: CanonicalMobileActivity[] = ['Operating', 'Idle', 'Standby', '
 const IDLE_REASONS = ['material', 'trucks', 'instructions', 'customer', 'access', 'traffic', 'weather', 'site preparation'];
 
 export function CanonicalDeurOperatorPanel() {
-  const { canonicalWork: work, canonicalBusy, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur } = useAuth();
+  const { canonicalWork: work, canonicalWorks, selectCanonicalWork, canonicalBusy, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [message, setMessage] = useState<string | null>(null);
@@ -22,6 +22,7 @@ export function CanonicalDeurOperatorPanel() {
     const result = await action();
     setMessage(result.success ? `${label} accepted by the canonical service.` : `${label} was not accepted (${result.code ?? 'UNKNOWN'}).`);
   };
+  if (!work && canonicalWorks.length > 1) return <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={[styles.content, { paddingTop: spacing.lg + insets.top }]}><Text style={[styles.title, { color: c.textPrimary }]}>Select equipment work</Text>{canonicalWorks.map(item => <Button key={item.rentalLine.id} label={`${item.equipment.assetNumber} · ${item.rental.rentalNumber}`} variant="secondary" onPress={() => selectCanonicalWork(item.rentalLine.id)} />)}</ScrollView>;
   if (!work) return <View style={[styles.center, { backgroundColor: c.background }]}><Text style={{ color: c.textMuted }}>No authorized active work found. Demo fixtures are disabled in UAT.</Text></View>;
   const deur = work.openDeur ?? work.dailyDeur;
   const isOpen = Boolean(work.openDeur);
