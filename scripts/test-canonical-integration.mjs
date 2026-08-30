@@ -29,6 +29,7 @@ check(work.includes("from('rental_equipment_lines')")&&work.includes('assignment
 check(work.includes("text(row,'status')==='Draft'||text(row,'status')==='In Progress'")&&!work.includes(".eq('work_date'"),'prior-workday open DEUR lookup is not date-filtered');
 check(work.includes("from('deur_events')")&&work.includes(".eq('is_open',true)")&&work.includes('activeActivity'),'current activity is reconciled from the canonical event projection');
 check(work.includes('for(const work of works)')&&work.includes('Canonical active activity projection is ambiguous.'),'multi-work projection hydrates and fail-closes active activity state');
+check(deurScreen.includes('Redirect')&&deurScreen.includes('if (!operator) return <Redirect href="/login" />;'),'unauthenticated DEUR route fails closed to login instead of rendering blank');
 const startBody=commands.slice(commands.indexOf(' start('),commands.indexOf(' transition('));
 check(startBody.includes("'command_start_deur_shift'")&&!startBody.includes('workDate')&&!startBody.includes('deurNumber'),'Start invokes canonical command without authoritative workDate/number');
 check(commands.includes("'command_submit_deur'")&&commands.includes('idempotencyKey:identity'),'Submit uses canonical command and stable caller identity');
