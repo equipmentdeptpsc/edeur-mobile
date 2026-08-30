@@ -28,6 +28,14 @@ export class CanonicalAuthenticationRepository {
 
   async signOut(): Promise<void> { await this.client.auth.signOut(); }
 
+  async restoreSession(): Promise<CanonicalAuthenticationResult | null> {
+    const response = await this.client.auth.getSession();
+    if (response.error || !response.data.session) return null;
+    try {
+      return { session: response.data.session, identity: await this.resolveIdentity(response.data.session.user.id) };
+    } catch { return null; }
+  }
+
   private async emailSession(email: string, password: string): Promise<Session> {
     const response = await this.client.auth.signInWithPassword({ email, password });
     if (response.error || !response.data.session) throw new CanonicalAuthenticationError('INVALID_CREDENTIALS','Invalid username or password.');
