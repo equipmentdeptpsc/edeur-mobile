@@ -29,6 +29,7 @@ check(authContext.includes("runtime.environment.mode === 'UAT'")&&authContext.in
 check(work.includes('read_current_operator_deur_turnover_work')&&work.includes('turnoverStatus')&&work.includes('currentAuthorizedOperatorId'),'reliever work is projected only through the canonical turnover RPC');
 check(commands.includes('command_initiate_deur_turnover')&&commands.includes('command_accept_deur_turnover'),'turnover commands remain canonical RPC calls');
 check(offlineOutbox.includes('expo-file-system')&&offlineOutbox.includes("'ACTIVITY_TRANSITION' | 'COMPLETE_SHIFT'")&&offlineOutbox.includes('localSequence'),'offline outbox is durable and limited to pilot-safe commands');
+check(offlineOutbox.includes("Platform.OS === 'web' ? null : new File")&&offlineOutbox.includes('if (Platform.OS === \'web\') return this.readWeb();'),'web outbox never constructs Expo FileSystem File objects');
 check(offlineOutbox.includes('idempotencyKey: id')&&offlineOutbox.includes('SYNC_CONFLICT')&&offlineOutbox.includes('TRANSPORT_FAILURE'),'offline replay preserves identities and stops safely on ambiguous outcomes');
 check(authContext.includes('CONNECTIVITY_REQUIRED_FOR_SUBMIT')&&authContext.includes("failure('LOCAL_PENDING')"),'Submit remains online-only while queued activity and End Shift distinguish local pending state');
 check(loginScreen.includes("mode === 'UAT'")&&loginScreen.includes('Username or email')&&loginScreen.includes('Demo PINs: 1234'),'login UI explicitly separates UAT credentials from demo PIN mode');
@@ -39,8 +40,8 @@ check(work.includes("from('deur_events')")&&work.includes(".eq('is_open',true)")
 check(work.includes('for(const work of works)')&&work.includes('Canonical active activity projection is ambiguous.'),'multi-work projection hydrates and fail-closes active activity state');
 check(deurScreen.includes('Redirect')&&deurScreen.includes('if (!operator) return <Redirect href="/login" />;'),'unauthenticated DEUR route fails closed to login instead of rendering blank');
 check(client.includes('persistSession: true'),'UAT Supabase session persistence is enabled');
-check(authentication.includes('getSession()')&&authentication.includes('restoreSession'),'UAT Supabase session restoration resolves canonical identity');
-check(authContext.includes("runtime.environment.mode === 'UAT' ? undefined")&&authContext.includes('applyCanonicalSession'),'auth initialization distinguishes loading from unauthenticated');
+check(authentication.includes('initialSession()')&&authentication.includes('INITIAL_SESSION')&&authentication.includes('restoreSession'),'UAT Supabase session restoration resolves canonical identity');
+check(authContext.includes("runtime.environment.mode === 'UAT' ? null")&&authContext.includes('applyCanonicalSession'),'auth initialization distinguishes deterministic unauthenticated state from restored sessions');
 const startBody=commands.slice(commands.indexOf(' start('),commands.indexOf(' transition('));
 check(startBody.includes("'command_start_deur_shift'")&&!startBody.includes('workDate')&&!startBody.includes('deurNumber'),'Start invokes canonical command without authoritative workDate/number');
 check(commands.includes("'command_submit_deur'")&&commands.includes('idempotencyKey:identity'),'Submit uses canonical command and stable caller identity');
