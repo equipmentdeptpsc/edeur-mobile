@@ -116,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canonicalBusyRef = useRef(false);
   const commandIds = useRef(new Map<string, string>());
   const replayingOffline = useRef(false);
+  const turnoverHydrationRef = useRef(0);
 
   const refreshOfflineStatus = async () => {
     if (runtime.environment.mode !== 'UAT' || !runtime.offlineOutbox) return;
@@ -135,11 +136,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally { replayingOffline.current = false; }
   };
 
+  const hydrateTurnoverTargets = (works: CanonicalOperatorWork[]) => {
+    if (!runtime.workRepository?.loadTurnoverTargets) return;
+    const hydration = ++turnoverHydrationRef.current;
+    void Promise.all(works.map(async (item) => {
+      await runtime.workRepository!.loadTurnoverTargets!(item);
+      if (hydration !== turnoverHydrationRef.current) return;
+      setCanonicalWorks(current => current.map(value => value.rentalLine.id === item.rentalLine.id ? { ...value, turnoverTargets: item.turnoverTargets } : value));
+      setCanonicalWork(current => current?.rentalLine.id === item.rentalLine.id ? { ...current, turnoverTargets: item.turnoverTargets } : current);
+      setSelectedCanonicalWork(current => current?.rentalLine.id === item.rentalLine.id ? { ...current, turnoverTargets: item.turnoverTargets } : current);
+    })).catch(() => { /* Eligibility is optional for core work rendering and can retry on the next refresh. */ });
+  };
+
   const applyCanonicalSession = async (authenticated: Awaited<ReturnType<NonNullable<typeof runtime.authentication>['restoreSession']>>) => {
     if (!authenticated || !runtime.workRepository) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); return false; }
     const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(authenticated.identity) : await runtime.workRepository.getCurrentWork(authenticated.identity).then(value=>value?[value]:[]);
     const work = works.length===1?works[0]:null; setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work); setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: authenticated.session.user.email ?? authenticated.identity.authUserId, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false }); setPendingDeurId(work?.openDeur?.id ?? null);
-    if (runtime.workRepository?.loadTurnoverTargets) void Promise.all(works.map(async (item) => { await runtime.workRepository!.loadTurnoverTargets!(item); setCanonicalWorks(current => current.map(value => value.rentalLine.id===item.rentalLine.id ? {...value, turnoverTargets:item.turnoverTargets} : value)); setCanonicalWork(current => current?.rentalLine.id===item.rentalLine.id ? {...current, turnoverTargets:item.turnoverTargets} : current); setSelectedCanonicalWork(current => current?.rentalLine.id===item.rentalLine.id ? {...current, turnoverTargets:item.turnoverTargets} : current); })).catch(() => { /* turnover availability is optional; core work remains rendered */ });
+    hydrateTurnoverTargets(works);
     return true;
   };
 
@@ -230,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshCanonicalWork = async () => {
     if (runtime.environment.mode !== 'UAT' || !canonicalWork || !runtime.workRepository) return false;
     try {
-      const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(canonicalWork.identity) : await runtime.workRepository.getCurrentWork(canonicalWork.identity).then(value=>value?[value]:[]); const work = works.find(item=>item.rentalLine.id===canonicalWork.rentalLine.id) ?? (works.length===1?works[0]:null); setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work);
+      const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(canonicalWork.identity) : await runtime.workRepository.getCurrentWork(canonicalWork.identity).then(value=>value?[value]:[]); const work = works.find(item=>item.rentalLine.id===canonicalWork.rentalLine.id) ?? (works.length===1?works[0]:null); setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work); hydrateTurnoverTargets(works);
       setPendingDeurId(work?.openDeur?.id ?? null);
       return true;
     } catch { return false; }
