@@ -29,6 +29,7 @@ interface AuthContextValue {
   transitionCanonicalActivity: (activity: CanonicalActivity, reason?: { id: string; label: string; remarks?: string }) => Promise<CanonicalCommandResult>;
   endCanonicalShift: (evidence?: { closingMeter?: number; closingLocation?: string }) => Promise<CanonicalCommandResult>;
   submitCanonicalDeur: () => Promise<CanonicalCommandResult>;
+  initiateCanonicalTurnover: (targetOperatorId: string) => Promise<{ success: boolean; code?: string }>;
   acceptCanonicalTurnover: () => Promise<{ success: boolean; code?: string }>;
   logout: () => void;
 }
@@ -278,6 +279,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (connectivity === 'offline') return failure('CONNECTIVITY_REQUIRED_FOR_SUBMIT');
     return runCanonical('submit', (identity) => runtime.commands!.submit(canonicalWork, deur.id, deur.rowVersion, identity));
   };
+  const initiateCanonicalTurnover = async (targetOperatorId: string): Promise<{ success: boolean; code?: string }> => {
+    const deur = canonicalWork?.openDeur;
+    if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    if (connectivity === 'offline') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
+    if (!canonicalWork.turnoverTargets?.some(target => target.operatorId === targetOperatorId)) return failure('TARGET_OPERATOR_NOT_ELIGIBLE');
+    if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
+    canonicalBusyRef.current = true; setCanonicalBusy(true);
+    try {
+      const identity = crypto.randomUUID();
+      const result = await runtime.commands.initiateTurnover(canonicalWork, deur.id, deur.rowVersion, targetOperatorId, identity);
+      if (result.success) await refreshCanonicalWork();
+      return result;
+    } finally { canonicalBusyRef.current = false; setCanonicalBusy(false); }
+  };
   const acceptCanonicalTurnover = async (): Promise<{ success: boolean; code?: string }> => {
     const turnoverId = canonicalWork?.custody?.turnoverId;
     if (!canonicalWork || canonicalWork.custody?.turnoverStatus !== 'PENDING' || !turnoverId || !runtime.commands) return failure('NO_PENDING_TURNOVER');
@@ -294,7 +309,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const selectCanonicalWork = (rentalEquipmentLineId:string) => { const work=canonicalWorks.find(item=>item.rentalLine.id===rentalEquipmentLineId) ?? null; setSelectedCanonicalWork(work); setCanonicalWork(work); setPendingDeurId(work?.openDeur?.id ?? null); };
   return (
-    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, acceptCanonicalTurnover, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
       {children}
     </AuthContext.Provider>
   );
