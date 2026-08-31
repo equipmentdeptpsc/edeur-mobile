@@ -1,2 +1,2 @@
-import type { CanonicalOperatorWork, CanonicalSessionIdentity } from '../canonical/contracts.generated';
+import type { CanonicalOperatorWork, CanonicalSessionIdentity, CanonicalTurnoverOperator } from '../canonical/contracts.generated';
 export interface OperatorWorkRepository { readonly kind: 'DEMO' | 'CANONICAL_UAT'; getCurrentWork(identity: CanonicalSessionIdentity): Promise<CanonicalOperatorWork | null>; getCurrentWorks?(identity: CanonicalSessionIdentity): Promise<CanonicalOperatorWork[]>; }

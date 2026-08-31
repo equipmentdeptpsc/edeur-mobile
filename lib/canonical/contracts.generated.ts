@@ -33,6 +33,13 @@ export interface CanonicalOperatorWork {
   custody?: { primaryOperatorId: string; currentAuthorizedOperatorId: string; turnoverId?: string; turnoverToOperatorId?: string; turnoverStatus: 'PENDING' | 'ACCEPTED' };
   openDeur?: CanonicalOpenDeur;
   dailyDeur?: CanonicalOpenDeur;
+  turnoverTargets?: CanonicalTurnoverOperator[];
+}
+
+export interface CanonicalTurnoverOperator {
+  operatorId: string;
+  displayName: string;
+  status: string;
 }
 
 export interface CanonicalCommandIdentity {
