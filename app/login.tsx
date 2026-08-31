@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, Image, TextInput, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, ScrollView, Image, TextInput, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/lib/useTheme';
@@ -9,7 +9,7 @@ import { spacing, radius } from '@/lib/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, getLoginError, mode, configurationError, operator } = useAuth();
+  const { login, getLoginError, mode, configurationError, operator, requiresOnlineFirstSignIn } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState('');
@@ -21,6 +21,8 @@ export default function LoginScreen() {
   useEffect(() => {
     if (operator) router.replace('/home');
   }, [operator, router]);
+
+  if (operator === undefined) return <View style={[styles.initializing, { backgroundColor: c.background }]}><ActivityIndicator size="large" color={c.blue600} /></View>;
 
   const handleLogin = async () => {
     setError('');
@@ -63,6 +65,7 @@ export default function LoginScreen() {
               loading={loading}
             />}
             {error ? <Text style={[styles.errorText, { color: c.red500 }]}>{error}</Text> : null}
+            {mode === 'UAT' && requiresOnlineFirstSignIn ? <Text style={[styles.errorText, { color: c.amber500 }]}>Internet connection is required for first sign-in on this device.</Text> : null}
             {mode === 'DEMO' ? <View style={[styles.hintContainer, { backgroundColor: c.blue50 }]}>
               <Text style={[styles.hintText, { color: c.blue600 }]}>
                 Demo PINs: 1234 (Juan), 5678 (Richard), 9999 (Pedro) • Reliever PIN: 1234
@@ -82,6 +85,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  initializing: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { flexGrow: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },
   content: { width: '100%', maxWidth: 360, alignSelf: 'center', alignItems: 'center', gap: 36 },
   logoSection: { alignItems: 'center', gap: spacing.lg },

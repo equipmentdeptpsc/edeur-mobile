@@ -3,6 +3,7 @@ import { createCanonicalClient } from './client';
 import { CanonicalAuthenticationRepository } from './authentication';
 import { CanonicalDeurCommandRepository } from './commandRepository';
 import { OfflineDeurCommandOutbox } from './offlineOutbox';
+import { OfflineContinuationRepository } from './offlineContinuation';
 import { selectOperatorWorkRepository } from '../repositories/selectOperatorWorkRepository';
 import type { OperatorWorkRepository } from '../repositories/OperatorWorkRepository';
 
@@ -13,6 +14,7 @@ export interface CanonicalRuntime {
   workRepository?: OperatorWorkRepository;
   commands?: CanonicalDeurCommandRepository;
   offlineOutbox?: OfflineDeurCommandOutbox;
+  offlineContinuation?: OfflineContinuationRepository;
 }
 
 export function createMobileRuntime(): CanonicalRuntime {
@@ -20,7 +22,7 @@ export function createMobileRuntime(): CanonicalRuntime {
     const environment=readCanonicalEnvironment();
     if(environment.mode==='DEMO')return{environment,configurationError:null,workRepository:selectOperatorWorkRepository(environment)};
     const client=createCanonicalClient(environment);
-    return{environment,configurationError:null,authentication:new CanonicalAuthenticationRepository(client,environment),workRepository:selectOperatorWorkRepository(environment,client),commands:new CanonicalDeurCommandRepository(client),offlineOutbox:new OfflineDeurCommandOutbox()};
+    return{environment,configurationError:null,authentication:new CanonicalAuthenticationRepository(client,environment),workRepository:selectOperatorWorkRepository(environment,client),commands:new CanonicalDeurCommandRepository(client),offlineOutbox:new OfflineDeurCommandOutbox(),offlineContinuation:new OfflineContinuationRepository()};
   }catch(error){return{environment:{mode:process.env.EXPO_PUBLIC_EDEUR_MODE==='UAT'?'UAT':'DEMO'},configurationError:error instanceof Error?error.message:'Canonical configuration failed.'};}
 }
 
