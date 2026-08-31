@@ -52,7 +52,7 @@ export default function RelieverLoginScreen() {
         return;
       }
       setLoading(false);
-      router.replace('/(tabs)/deur');
+      router.replace('/deur');
     }, 400);
   };
 

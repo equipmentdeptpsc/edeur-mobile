@@ -57,13 +57,13 @@ export default function HomeScreen() {
     // Active DEUR → go to DEUR tab (HMI or review/resume)
     // Submitted/Ended DEUR → go to read-only details using the correct ID
     if (displayDeur && displayDeur.status === 'Active') {
-      router.push('/(tabs)/deur');
+      router.push('/deur');
     } else if (displayDeur && (displayDeur.status === 'Submitted' || displayDeur.status === 'Waiting Acknowledgement' || displayDeur.status === 'Acknowledged' || displayDeur.status === 'Rejected')) {
       router.push(`/deur-details/${displayDeur.id}`);
     } else if (displayDeur && displayDeur.status === 'Ended') {
       router.push(`/deur-summary/${displayDeur.id}`);
     } else {
-      router.push('/(tabs)/deur');
+      router.push('/deur');
     }
   };
 

@@ -64,7 +64,7 @@ export default function DeurSummaryScreen() {
   };
 
   const handleBack = () => {
-    if (isSubmitted) router.replace('/(tabs)/home');
+    if (isSubmitted) router.replace('/home');
     else router.back();
   };
 

@@ -43,12 +43,12 @@ export default function PostSubmissionScreen() {
   };
 
   const handleStartNew = () => {
-    router.replace('/(tabs)/deur');
+    router.replace('/deur');
   };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.background }]} contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
-      <PageHeader title="DEUR Submitted" onBack={() => router.replace('/(tabs)/home')} />
+      <PageHeader title="DEUR Submitted" onBack={() => router.replace('/home')} />
       <View style={styles.content}>
         <View style={styles.successHeader}>
           <View style={[styles.successIcon, { backgroundColor: c.emerald50 }]}>

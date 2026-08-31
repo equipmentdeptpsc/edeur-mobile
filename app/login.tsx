@@ -19,7 +19,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (operator) router.replace('/(tabs)/home');
+    if (operator) router.replace('/home');
   }, [operator, router]);
 
   const handleLogin = async () => {
@@ -30,7 +30,7 @@ export default function LoginScreen() {
     setLoading(true);
     const success = await login(mode === 'UAT' ? identifier.trim() : pin.trim(), mode === 'UAT' ? password : undefined);
     if (!success) { setError(mode === 'UAT' ? (getLoginError() ?? 'Canonical sign-in failed.') : 'Invalid PIN. Please try again.'); setPin(''); setPassword(''); setLoading(false); return; }
-    setLoading(false); router.replace('/(tabs)/home');
+    setLoading(false); router.replace('/home');
   };
 
   return (
