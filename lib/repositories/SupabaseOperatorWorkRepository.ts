@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CanonicalActivity, CanonicalOpenDeur, CanonicalOperatorWork, CanonicalSessionIdentity, CanonicalTurnoverOperator } from '../canonical/contracts.generated';
 import type { OperatorWorkRepository } from './OperatorWorkRepository';
-type Row=Record<string,unknown>;const text=(row:Row,key:string)=>typeof row[key]==='string'?row[key] as string:undefined;const numeric=(row:Row,key:string)=>typeof row[key]==='number'?row[key] as number:undefined;
+type Row=Record<string,unknown>;const text=(row:Row,key:string)=>typeof row[key]==='string'?row[key] as string:undefined;const numeric=(row:Row,key:string)=>{const value=row[key];if(typeof value==='number')return Number.isFinite(value)?value:undefined;if(typeof value==='string'&&/^-?\d+(?:\.\d+)?$/.test(value)){const parsed=Number(value);return Number.isFinite(parsed)?parsed:undefined;}return undefined;};
 export class SupabaseOperatorWorkRepository implements OperatorWorkRepository {
   readonly kind='CANONICAL_UAT' as const;constructor(private readonly client:SupabaseClient){}
   async getCurrentWorks(identity:CanonicalSessionIdentity):Promise<CanonicalOperatorWork[]>{
