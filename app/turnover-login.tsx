@@ -56,7 +56,7 @@ export default function TurnoverLoginScreen() {
           return;
         }
         setLoading(false);
-        router.replace('/(tabs)/deur');
+        router.replace('/deur');
       }, 400);
     } else {
       if (!pin.trim()) {
@@ -73,7 +73,7 @@ export default function TurnoverLoginScreen() {
           return;
         }
         setLoading(false);
-        router.replace('/(tabs)/deur');
+        router.replace('/deur');
       }, 400);
     }
   };
