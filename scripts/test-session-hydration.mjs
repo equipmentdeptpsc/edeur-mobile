@@ -7,7 +7,7 @@ const authentication = fs.readFileSync('lib/canonical/authentication.ts', 'utf8'
 const login = fs.readFileSync('app/login.tsx', 'utf8');
 const checks = [
   ['core session applies work before optional turnover loading', /setCanonicalWork\(work\)[\s\S]*loadTurnoverTargets/],
-  ['turnover failure does not reject core session hydration', /core work remains rendered/],
+  ['turnover failure leaves core session hydration usable and retries on refresh', /Eligibility is optional for core work rendering and can retry on the next refresh\./],
   ['repository exposes separate turnover loading', /async loadTurnoverTargets\(work/],
   ['core work reads do not await turnover eligibility', !/for\(const work of works\) await this\.attachTurnoverTargets\(work\)/.test(repository)],
   ['session hydration uses the one-shot INITIAL_SESSION event', /onAuthStateChange\(/.test(authentication) && /INITIAL_SESSION/.test(authentication)],
