@@ -25,10 +25,15 @@ interface OfflineStore { read(): Promise<OfflineDeurCommand[]>; write(items: Off
 const STORAGE_KEY = 'edeur-uat-offline-outbox-v1';
 
 class DurableOfflineStore implements OfflineStore {
-  private readonly file = new File(Paths.document, 'edeur-uat-offline-outbox.json');
+  // Expo FileSystem's native File implementation validates its path in the
+  // constructor. That implementation is unavailable on web, where the outbox
+  // is intentionally backed by localStorage instead.
+  private readonly file: File | null = Platform.OS === 'web' ? null : new File(Paths.document, 'edeur-uat-offline-outbox.json');
   async read(): Promise<OfflineDeurCommand[]> {
     try {
-      const raw = Platform.OS === 'web' ? globalThis.localStorage?.getItem(STORAGE_KEY) : this.file.exists ? await this.file.text() : null;
+      if (Platform.OS === 'web') return this.readWeb();
+      if (!this.file) return [];
+      const raw = this.file.exists ? await this.file.text() : null;
       const parsed = raw ? JSON.parse(raw) : [];
       return Array.isArray(parsed) ? parsed.filter(isOfflineCommand).sort((left, right) => left.localSequence - right.localSequence) : [];
     } catch { return []; }
@@ -36,8 +41,14 @@ class DurableOfflineStore implements OfflineStore {
   async write(items: OfflineDeurCommand[]): Promise<void> {
     const value = JSON.stringify(items);
     if (Platform.OS === 'web') { globalThis.localStorage?.setItem(STORAGE_KEY, value); return; }
+    if (!this.file) return;
     if (!this.file.exists) this.file.create({ intermediates: true });
     this.file.write(value);
+  }
+  private readWeb(): OfflineDeurCommand[] {
+    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(isOfflineCommand).sort((left, right) => left.localSequence - right.localSequence) : [];
   }
 }
 
