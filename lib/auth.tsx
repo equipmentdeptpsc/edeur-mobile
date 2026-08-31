@@ -103,7 +103,7 @@ function clearPendingDeurId(): void {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [operator, setOperator] = useState<Operator | null | undefined>(runtime.environment.mode === 'UAT' ? undefined : loadSession());
+  const [operator, setOperator] = useState<Operator | null | undefined>(runtime.environment.mode === 'UAT' ? null : loadSession());
   const [canonicalWork, setCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [canonicalWorks, setCanonicalWorks] = useState<CanonicalOperatorWork[]>([]);
   const [selectedCanonicalWork, setSelectedCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
