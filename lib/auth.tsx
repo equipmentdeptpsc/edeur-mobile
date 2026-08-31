@@ -4,8 +4,11 @@ import type { Operator } from './types';
 import type { CanonicalActivity, CanonicalCommandResult, CanonicalOperatorWork } from './canonical/contracts.generated';
 import { mobileRuntime as runtime } from './canonical/runtime';
 import { CanonicalAuthenticationError } from './canonical/authentication';
-import { useConnectivity } from './useConnectivity';
+import { probeCanonicalConnectivity, useConnectivity } from './useConnectivity';
 import type { OfflineSyncState } from './canonical/offlineOutbox';
+import type { OfflineContinuationSnapshot } from './canonical/offlineContinuation';
+
+export type UatSessionState = 'INITIALIZING' | 'ONLINE_AUTHENTICATED' | 'OFFLINE_CONTINUATION' | 'OFFLINE_EXPIRED' | 'REAUTH_REQUIRED' | 'SIGNED_OUT';
 
 interface AuthContextValue {
   operator: Operator | null | undefined;
@@ -19,6 +22,9 @@ interface AuthContextValue {
   canonicalBusy: boolean;
   offlineSyncState: OfflineSyncState;
   offlinePendingCount: number;
+  uatSessionState: UatSessionState;
+  offlineContinuationSnapshot: OfflineContinuationSnapshot | null;
+  requiresOnlineFirstSignIn: boolean;
   getLoginError: () => string | null;
   login: (identifier: string, password?: string) => Promise<boolean>;
   loginReliever: (name: string, pin: string, deurId?: string) => boolean;
@@ -103,19 +109,23 @@ function clearPendingDeurId(): void {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [operator, setOperator] = useState<Operator | null | undefined>(runtime.environment.mode === 'UAT' ? null : loadSession());
+  const [operator, setOperator] = useState<Operator | null | undefined>(runtime.environment.mode === 'UAT' ? undefined : loadSession());
   const [canonicalWork, setCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [canonicalWorks, setCanonicalWorks] = useState<CanonicalOperatorWork[]>([]);
   const [selectedCanonicalWork, setSelectedCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [pendingDeurId, setPendingDeurId] = useState<string | null>(loadPendingDeurId());
   const [canonicalBusy, setCanonicalBusy] = useState(false);
-  const connectivity = useConnectivity();
+  const connectivity = useConnectivity(runtime.environment.apiBaseUrl);
   const [offlineSyncState, setOfflineSyncState] = useState<OfflineSyncState>('ONLINE');
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
+  const [uatSessionState, setUatSessionState] = useState<UatSessionState>(runtime.environment.mode === 'UAT' ? 'INITIALIZING' : 'ONLINE_AUTHENTICATED');
+  const [offlineContinuationSnapshot, setOfflineContinuationSnapshot] = useState<OfflineContinuationSnapshot | null>(null);
+  const [requiresOnlineFirstSignIn, setRequiresOnlineFirstSignIn] = useState(false);
   const loginErrorRef = useRef<string | null>(null);
   const canonicalBusyRef = useRef(false);
   const commandIds = useRef(new Map<string, string>());
   const replayingOffline = useRef(false);
+  const revalidatingSession = useRef(false);
   const turnoverHydrationRef = useRef(0);
 
   const refreshOfflineStatus = async () => {
@@ -124,8 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOfflineSyncState(connectivity === 'offline' ? 'OFFLINE' : count > 0 ? 'SYNC_PENDING' : 'ONLINE');
   };
 
-  const replayOffline = async () => {
-    if (replayingOffline.current || connectivity === 'offline' || !runtime.offlineOutbox || !runtime.commands) return;
+  const replayOffline = async (sessionValidated = false) => {
+    if (replayingOffline.current || connectivity === 'offline' || (!sessionValidated && uatSessionState !== 'ONLINE_AUTHENTICATED') || !runtime.offlineOutbox || !runtime.commands) return;
     replayingOffline.current = true; setOfflineSyncState('SYNC_PENDING');
     try {
       const state = await runtime.offlineOutbox.replay((item) => item.commandType === 'ACTIVITY_TRANSITION'
@@ -152,12 +162,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!authenticated || !runtime.workRepository) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); return false; }
     const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(authenticated.identity) : await runtime.workRepository.getCurrentWork(authenticated.identity).then(value=>value?[value]:[]);
     const work = works.length===1?works[0]:null; setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work); setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: authenticated.session.user.email ?? authenticated.identity.authUserId, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false }); setPendingDeurId(work?.openDeur?.id ?? null);
+    if (runtime.offlineContinuation) {
+      try {
+        if (work?.openDeur && await runtime.offlineContinuation.save(work)) {
+          const restored = await runtime.offlineContinuation.restore();
+          setOfflineContinuationSnapshot(restored.kind === 'eligible' || restored.kind === 'expired' ? restored.snapshot : null);
+        } else { await runtime.offlineContinuation.clear(); setOfflineContinuationSnapshot(null); }
+      } catch { setOfflineContinuationSnapshot(null); }
+    }
     hydrateTurnoverTargets(works);
     return true;
   };
 
-  useEffect(() => { if (runtime.environment.mode !== 'UAT' || !runtime.authentication) return; void runtime.authentication.restoreSession().then((session) => applyCanonicalSession(session).catch(() => { setOperator(null); })); }, []);
-  useEffect(() => { void refreshOfflineStatus(); if (connectivity !== 'offline') void replayOffline(); }, [connectivity, operator?.id]);
+  const restoreOfflineContinuation = async () => {
+    if (!runtime.offlineContinuation) return false;
+    const restored = await runtime.offlineContinuation.restore();
+    if (restored.kind !== 'eligible' && restored.kind !== 'expired') return false;
+    const { snapshot, work } = restored;
+    setOfflineContinuationSnapshot(snapshot);
+    setCanonicalWorks([work]); setSelectedCanonicalWork(work); setCanonicalWork(work); setPendingDeurId(work.openDeur?.id ?? null);
+    setOperator({ id: snapshot.operatorId, name: snapshot.operatorDisplayName, loginName: snapshot.applicationUserId, initials: snapshot.operatorDisplayName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false });
+    setUatSessionState(restored.kind === 'eligible' ? 'OFFLINE_CONTINUATION' : 'OFFLINE_EXPIRED');
+    return true;
+  };
+
+  useEffect(() => {
+    if (runtime.environment.mode !== 'UAT' || !runtime.authentication) return;
+    let cancelled = false;
+    void (async () => {
+      setUatSessionState('INITIALIZING');
+      const online = await probeCanonicalConnectivity(runtime.environment.apiBaseUrl);
+      if (!cancelled && online) {
+        try {
+          const session = await runtime.authentication!.restoreSession();
+          if (await applyCanonicalSession(session)) { if (!cancelled) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); } return; }
+        } catch { /* A reachable service without a valid session is signed out, not offline continuation. */ }
+      }
+      if (!cancelled && !online && await restoreOfflineContinuation()) { setRequiresOnlineFirstSignIn(false); return; }
+      if (!cancelled) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); setRequiresOnlineFirstSignIn(!online); setUatSessionState('SIGNED_OUT'); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    void refreshOfflineStatus();
+    if (runtime.environment.mode !== 'UAT' || uatSessionState === 'INITIALIZING') return;
+    if (connectivity === 'offline') { void restoreOfflineContinuation(); return; }
+    if (!runtime.authentication || revalidatingSession.current) return;
+    revalidatingSession.current = true;
+    void (async () => {
+      try {
+        const session = await runtime.authentication!.restoreSession();
+        if (!await applyCanonicalSession(session)) { setUatSessionState('REAUTH_REQUIRED'); setOfflineSyncState('SYNC_CONFLICT'); return; }
+        setUatSessionState('ONLINE_AUTHENTICATED');
+        await replayOffline(true);
+      } catch { setUatSessionState('REAUTH_REQUIRED'); setOfflineSyncState('SYNC_CONFLICT'); }
+      finally { revalidatingSession.current = false; }
+    })();
+  }, [connectivity, uatSessionState]);
 
   const login = async (identifier: string, password?: string) => {
     loginErrorRef.current=null;
@@ -165,7 +227,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (runtime.configurationError || !runtime.authentication || !runtime.workRepository || !password) return false;
       try {
         const authenticated = await runtime.authentication.signIn(identifier, password);
-        return await applyCanonicalSession(authenticated);
+        const applied = await applyCanonicalSession(authenticated);
+        if (applied) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); }
+        return applied;
       } catch(error) { loginErrorRef.current=error instanceof CanonicalAuthenticationError?error.message:'Canonical sign-in failed.';return false; }
     }
     const pin = identifier;
@@ -233,9 +297,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     if (runtime.environment.mode === 'UAT') void runtime.authentication?.signOut();
+    if (runtime.environment.mode === 'UAT') void runtime.offlineContinuation?.clear();
     setOperator(null);
     setCanonicalWork(null); setCanonicalWorks([]); setSelectedCanonicalWork(null);
     setPendingDeurId(null);
+    setOfflineContinuationSnapshot(null);
+    if (runtime.environment.mode === 'UAT') setUatSessionState('SIGNED_OUT');
     clearSession();
   };
 
@@ -245,6 +312,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(canonicalWork.identity) : await runtime.workRepository.getCurrentWork(canonicalWork.identity).then(value=>value?[value]:[]); const work = works.find(item=>item.rentalLine.id===canonicalWork.rentalLine.id) ?? (works.length===1?works[0]:null); setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work); hydrateTurnoverTargets(works);
       setPendingDeurId(work?.openDeur?.id ?? null);
+      if (runtime.offlineContinuation) {
+        if (work?.openDeur && await runtime.offlineContinuation.save(work)) {
+          const restored = await runtime.offlineContinuation.restore();
+          setOfflineContinuationSnapshot(restored.kind === 'eligible' || restored.kind === 'expired' ? restored.snapshot : null);
+        } else { await runtime.offlineContinuation.clear(); setOfflineContinuationSnapshot(null); }
+      }
       return true;
     } catch { return false; }
   };
@@ -263,6 +336,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   const startCanonicalDeur: AuthContextValue['startCanonicalDeur'] = async (optional = {}) => {
     if (!canonicalWork || canonicalWork.openDeur || canonicalWork.dailyDeur || !runtime.commands) return failure(canonicalWork?.openDeur ? 'PRIOR_OPEN_DEUR' : canonicalWork?.dailyDeur ? 'DAILY_DEUR_EXISTS' : 'NO_AUTHORIZED_WORK');
+    if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_START');
     const draftKey = 'start-draft';
     let draftId = commandIds.current.get(draftKey);
     if (!draftId) { draftId = crypto.randomUUID(); commandIds.current.set(draftKey, draftId); }
@@ -273,31 +347,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const transitionCanonicalActivity: AuthContextValue['transitionCanonicalActivity'] = async (activity, reason) => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
-    if (connectivity === 'offline' && runtime.offlineOutbox) {
+    if (connectivity === 'offline' && uatSessionState === 'OFFLINE_CONTINUATION' && runtime.offlineOutbox) {
       await runtime.offlineOutbox.enqueue({ commandType: 'ACTIVITY_TRANSITION', deurId: deur.id, rentalEquipmentLineId: canonicalWork.rentalLine.id, operatorId: canonicalWork.identity.operatorId, expectedVersion: deur.rowVersion, work: canonicalWork, payload: { activity, ...(reason ? { idleReason: reason } : {}) } });
       await refreshOfflineStatus(); return failure('LOCAL_PENDING');
     }
+    if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure(uatSessionState === 'OFFLINE_EXPIRED' ? 'OFFLINE_CONTINUATION_EXPIRED' : 'CONNECTIVITY_REQUIRED_FOR_REVALIDATION');
     return runCanonical(`transition:${activity}`, (identity) => runtime.commands!.transition(canonicalWork, deur.id, deur.rowVersion, activity, identity, reason));
   };
   const endCanonicalShift: AuthContextValue['endCanonicalShift'] = async (evidence = {}) => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
-    if (connectivity === 'offline' && runtime.offlineOutbox) {
+    if (connectivity === 'offline' && uatSessionState === 'OFFLINE_CONTINUATION' && runtime.offlineOutbox) {
       await runtime.offlineOutbox.enqueue({ commandType: 'COMPLETE_SHIFT', deurId: deur.id, rentalEquipmentLineId: canonicalWork.rentalLine.id, operatorId: canonicalWork.identity.operatorId, expectedVersion: deur.rowVersion, work: canonicalWork, payload: { evidence } });
       await refreshOfflineStatus(); return failure('LOCAL_PENDING');
     }
+    if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure(uatSessionState === 'OFFLINE_EXPIRED' ? 'OFFLINE_CONTINUATION_EXPIRED' : 'CONNECTIVITY_REQUIRED_FOR_REVALIDATION');
     return runCanonical('end-shift', (identity) => runtime.commands!.endShift(canonicalWork, deur.id, deur.rowVersion, identity, evidence));
   };
   const submitCanonicalDeur = async () => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
-    if (connectivity === 'offline') return failure('CONNECTIVITY_REQUIRED_FOR_SUBMIT');
+    if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_SUBMIT');
     return runCanonical('submit', (identity) => runtime.commands!.submit(canonicalWork, deur.id, deur.rowVersion, identity));
   };
   const initiateCanonicalTurnover = async (targetOperatorId: string): Promise<{ success: boolean; code?: string }> => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
-    if (connectivity === 'offline') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
+    if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
     if (!canonicalWork.turnoverTargets?.some(target => target.operatorId === targetOperatorId)) return failure('TARGET_OPERATOR_NOT_ELIGIBLE');
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     canonicalBusyRef.current = true; setCanonicalBusy(true);
@@ -311,7 +387,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const acceptCanonicalTurnover = async (): Promise<{ success: boolean; code?: string }> => {
     const turnoverId = canonicalWork?.custody?.turnoverId;
     if (!canonicalWork || canonicalWork.custody?.turnoverStatus !== 'PENDING' || !turnoverId || !runtime.commands) return failure('NO_PENDING_TURNOVER');
-    if (connectivity === 'offline') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
+    if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     canonicalBusyRef.current = true; setCanonicalBusy(true);
     try {
@@ -324,7 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const selectCanonicalWork = (rentalEquipmentLineId:string) => { const work=canonicalWorks.find(item=>item.rentalLine.id===rentalEquipmentLineId) ?? null; setSelectedCanonicalWork(work); setCanonicalWork(work); setPendingDeurId(work?.openDeur?.id ?? null); };
   return (
-    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, requiresOnlineFirstSignIn, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
       {children}
     </AuthContext.Provider>
   );
