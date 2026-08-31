@@ -11,7 +11,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test:post-submit": "node scripts/test-post-submit-projection.mjs",
-    "test:turnover-ui": "node scripts/test-turnover-ui.mjs"
+    "test:turnover-ui": "node scripts/test-turnover-ui.mjs",
+    "test:session-hydration": "node scripts/test-session-hydration.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "^0.4.2",
