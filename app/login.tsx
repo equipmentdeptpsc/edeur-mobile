@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, Image, TextInput, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { spacing, radius } from '@/lib/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, getLoginError, mode, configurationError } = useAuth();
+  const { login, getLoginError, mode, configurationError, operator } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState('');
@@ -17,6 +17,10 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (operator) router.replace('/(tabs)/home');
+  }, [operator, router]);
 
   const handleLogin = async () => {
     setError('');

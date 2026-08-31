@@ -29,11 +29,29 @@ export class CanonicalAuthenticationRepository {
   async signOut(): Promise<void> { await this.client.auth.signOut(); }
 
   async restoreSession(): Promise<CanonicalAuthenticationResult | null> {
-    const response = await this.client.auth.getSession();
-    if (response.error || !response.data.session) return null;
+    const session = await this.initialSession();
+    if (!session) return null;
     try {
-      return { session: response.data.session, identity: await this.resolveIdentity(response.data.session.user.id) };
+      return { session, identity: await this.resolveIdentity(session.user.id) };
     } catch { return null; }
+  }
+
+  private initialSession(): Promise<Session | null> {
+    return new Promise((resolve) => {
+      let settled = false;
+      let unsubscribe: (() => void) | undefined;
+      const finish = (session: Session | null) => {
+        if (settled) return;
+        settled = true;
+        unsubscribe?.();
+        resolve(session);
+      };
+      const { data } = this.client.auth.onAuthStateChange((event, session) => {
+        if (event === 'INITIAL_SESSION') finish(session);
+      });
+      unsubscribe = () => data.subscription.unsubscribe();
+      if (settled) unsubscribe();
+    });
   }
 
   private async emailSession(email: string, password: string): Promise<Session> {
