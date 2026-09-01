@@ -1,3 +1,5 @@
+import { createSecureCommandId } from './secureCommandId';
+
 export interface OfflineCommandEnvelope<T> {
   commandId: string;
   idempotencyKey: string;
@@ -10,7 +12,7 @@ export interface OfflineCommandEnvelope<T> {
   state: 'PENDING' | 'ACKNOWLEDGED' | 'CONFLICT' | 'REJECTED';
 }
 
-export function createOfflineCommandEnvelope<T>(input: Omit<OfflineCommandEnvelope<T>, 'commandId' | 'idempotencyKey' | 'retryCount' | 'state'>, id = crypto.randomUUID()): OfflineCommandEnvelope<T> {
+export function createOfflineCommandEnvelope<T>(input: Omit<OfflineCommandEnvelope<T>, 'commandId' | 'idempotencyKey' | 'retryCount' | 'state'>, id = createSecureCommandId()): OfflineCommandEnvelope<T> {
   return { ...input, commandId: id, idempotencyKey: id, retryCount: 0, state: 'PENDING' };
 }
 

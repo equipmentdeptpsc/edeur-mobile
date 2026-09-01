@@ -7,6 +7,7 @@ import { CanonicalAuthenticationError } from './canonical/authentication';
 import { canonicalConnectivityProbeUrl, probeCanonicalConnectivity, useConnectivity } from './useConnectivity';
 import type { OfflineSyncState } from './canonical/offlineOutbox';
 import type { OfflineContinuationSnapshot } from './canonical/offlineContinuation';
+import { createSecureCommandId } from './canonical/secureCommandId';
 
 export type UatSessionState = 'INITIALIZING' | 'ONLINE_AUTHENTICATED' | 'OFFLINE_CONTINUATION' | 'OFFLINE_EXPIRED' | 'REAUTH_REQUIRED' | 'SIGNED_OUT';
 
@@ -341,7 +342,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const runCanonical = async (key: string, action: (identity: string) => Promise<CanonicalCommandResult>, onAccepted?: (result: Extract<CanonicalCommandResult, { success: true }>) => Promise<void>) => {
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     let identity = commandIds.current.get(key);
-    if (!identity) { identity = crypto.randomUUID(); commandIds.current.set(key, identity); }
+    if (!identity) { identity = createSecureCommandId(); commandIds.current.set(key, identity); }
     canonicalBusyRef.current = true;
     setCanonicalBusy(true);
     try {
@@ -357,7 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_START');
     const draftKey = 'start-draft';
     let draftId = commandIds.current.get(draftKey);
-    if (!draftId) { draftId = crypto.randomUUID(); commandIds.current.set(draftKey, draftId); }
+    if (!draftId) { draftId = createSecureCommandId(); commandIds.current.set(draftKey, draftId); }
     const result = await runCanonical('start', (identity) => runtime.commands!.start(canonicalWork, identity, draftId!, optional), async (accepted) => {
       const openDeur = { ...accepted.record, activeActivity: 'operation' as const };
       const startedWork = { ...canonicalWork, openDeur, dailyDeur: openDeur };
@@ -402,7 +403,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     canonicalBusyRef.current = true; setCanonicalBusy(true);
     try {
-      const identity = crypto.randomUUID();
+      const identity = createSecureCommandId();
       const result = await runtime.commands.initiateTurnover(canonicalWork, deur.id, deur.rowVersion, targetOperatorId, identity);
       if (result.success) await refreshCanonicalWork();
       return result;
@@ -415,7 +416,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     canonicalBusyRef.current = true; setCanonicalBusy(true);
     try {
-      const identity = crypto.randomUUID();
+      const identity = createSecureCommandId();
       const result = await runtime.commands.acceptTurnover(turnoverId, canonicalWork.identity.operatorId, identity);
       if (result.success) await refreshCanonicalWork();
       return result;
