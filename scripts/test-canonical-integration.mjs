@@ -35,7 +35,7 @@ check(authContext.includes('CONNECTIVITY_REQUIRED_FOR_SUBMIT')&&authContext.incl
 check(loginScreen.includes("mode === 'UAT'")&&loginScreen.includes('Username or email')&&loginScreen.includes('Demo PINs: 1234'),'login UI explicitly separates UAT credentials from demo PIN mode');
 check(selector.includes("environment.mode==='DEMO'")&&selector.includes('Demo fallback is disabled'),'DEMO selects mock and UAT has no silent fallback');
 check(work.includes("from('rental_equipment_lines')")&&work.includes('assignment_id')&&work.includes('rental_equipment_line_id'),'canonical Rental Line drives active work and open DEUR lookup');
-check(work.includes("text(row,'status')==='Draft'||text(row,'status')==='In Progress'")&&!work.includes(".eq('work_date'"),'prior-workday open DEUR lookup is not date-filtered');
+check(work.includes("const open=rows.find(row=>text(row,'status')==='Draft'||text(row,'status')==='In Progress')")&&work.includes(".eq('work_date',effectiveWorkDate)"),'prior-workday open DEUR lookup is unfiltered while the separate pilot daily lookup is server-date scoped');
 check(work.includes("from('deur_events')")&&work.includes(".eq('is_open',true)")&&work.includes('activeActivity'),'current activity is reconciled from the canonical event projection');
 check(work.includes('for(const work of works)')&&work.includes('Canonical active activity projection is ambiguous.'),'multi-work projection hydrates and fail-closes active activity state');
 check(deurScreen.includes('Redirect')&&deurScreen.includes('if (!operator) return <Redirect href="/login" />;'),'unauthenticated DEUR route fails closed to login instead of rendering blank');
