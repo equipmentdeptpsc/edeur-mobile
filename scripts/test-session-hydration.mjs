@@ -15,6 +15,8 @@ const checks = [
   ['UAT keeps a hydration sentinel until online authorization or bounded offline restoration resolves', /mode === 'UAT' \? undefined : loadSession\(\)/.test(auth) && /'INITIALIZING'/.test(auth)],
   ['startup probes canonical connectivity before selecting remote hydration or offline continuation', /probeCanonicalConnectivity\(runtime\.environment\.apiBaseUrl\)/.test(auth)],
   ['offline continuation restores only a bounded saved snapshot', /restoreOfflineContinuation/.test(auth) && /OFFLINE_CONTINUATION/.test(auth)],
+  ['accepted Start DEUR persists its canonical response before the follow-up work refresh', /runCanonical\('start',[\s\S]*?async \(accepted\)[\s\S]*?activeActivity: 'operation'[\s\S]*?persistOfflineContinuation\(startedWork\)[\s\S]*?refreshCanonicalWork/.test(auth)],
+  ['continuation writes retain the timestamp from a genuine successful online authorization', /applyCanonicalSession[\s\S]*?lastSuccessfulOnlineAuthorizationAt\.current = new Date\(\)/.test(auth) && /persistOfflineContinuation[\s\S]*?offlineContinuation\.save\(work, authorizationAt\)/.test(auth)],
   ['reconnect revalidates before it replays the durable outbox', /restoreSession\(\)[\s\S]*applyCanonicalSession\(session\)[\s\S]*replayOffline\(true\)/.test(auth)],
   ['restored sessions redirect from login to the public Home path', /if \(operator\) router\.replace\('\/home'\)/.test(login)],
   ['a successful login redirects through the public Home path', /router\.replace\('\/home'\)/.test(login)],

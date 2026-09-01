@@ -51,4 +51,15 @@ store.value = { schemaVersion: 999 };
 assert.equal((await repository.restore()).kind, 'invalid', 'old or malformed snapshot fails closed');
 assert.equal(await repository.save({ ...work, openDeur: undefined }, authorizationAt), false, 'no open DEUR never grants continuation');
 
+const startedWork = { ...work, openDeur: { id: 'deur-started-1', deurNumber: 'DEUR-STARTED-1', workDate: '2026-09-01', status: 'In Progress', operatorId: 'operator-1', rowVersion: 1, activeActivity: 'operation' } };
+const browserStorage = new Map();
+globalThis.localStorage = { getItem: (key) => browserStorage.get(key) ?? null, setItem: (key, value) => browserStorage.set(key, value), removeItem: (key) => browserStorage.delete(key) };
+const webRepository = new OfflineContinuationRepository();
+assert.equal(await webRepository.save(startedWork, authorizationAt), true, 'accepted Start DEUR writes the production continuation snapshot');
+const webSnapshot = JSON.parse(browserStorage.get('edeur-uat-offline-continuation-v1'));
+assert.equal(webSnapshot.deurId, 'deur-started-1', 'the start response DEUR identity is cached at the production web storage key');
+assert.equal(webSnapshot.deurVersion, 1, 'the start response version is cached');
+assert.equal(webSnapshot.currentActivity, 'operation', 'the canonical start activity is cached');
+assert.equal(webSnapshot.lastSuccessfulOnlineAuthorizationAt, authorizationAt.toISOString(), 'starting a DEUR preserves the prior online authorization timestamp');
+
 console.log('PASS offline continuation: online snapshot, restart restore, expiry, immutable work date, malformed fail-closed');
