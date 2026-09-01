@@ -8,6 +8,7 @@ export type ConnectionStatus =
   | 'pending'
   | 'synced'
   | 'failed';
+export type ConnectivityProbeFailureClass = 'TIMEOUT' | 'NETWORK';
 
 const HEARTBEAT_INTERVAL_MS = 15000;
 const HEARTBEAT_TIMEOUT_MS = 5000;
@@ -19,6 +20,13 @@ export function canonicalConnectivityProbeUrl(apiBaseUrl?: string): string | und
   catch { return undefined; }
 }
 
+/** Abort errors have different prototypes across browser, Hermes, and fetch polyfills. */
+export function isAbortLikeError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const value = error as { name?: unknown; code?: unknown };
+  return value.name === 'AbortError' || value.code === 'ABORT_ERR';
+}
+
 /** A reachable endpoint may reject an unauthenticated probe; reachability is sufficient here. */
 export async function probeCanonicalConnectivity(probeUrl?: string): Promise<boolean> {
   if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false) return false;
@@ -26,16 +34,16 @@ export async function probeCanonicalConnectivity(probeUrl?: string): Promise<boo
   if (!target) return false;
   console.info('CONNECTIVITY_PROBE_START', JSON.stringify({ target: new URL(target).pathname || '/' }));
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), HEARTBEAT_TIMEOUT_MS);
+    const controller = typeof AbortController === 'function' ? new AbortController() : undefined;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), HEARTBEAT_TIMEOUT_MS) : undefined;
     try {
-      const response = await fetch(target, { method: 'GET', cache: 'no-store', signal: controller.signal });
+      const response = await fetch(target, { method: 'GET', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) });
       console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: true, httpStatus: response.status, classifiedOnline: true, failureClass: null }));
     }
-    finally { clearTimeout(timeoutId); }
+    finally { if (timeoutId) clearTimeout(timeoutId); }
     return true;
   } catch (error) {
-    const failureClass = error instanceof DOMException && error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_OR_CORS';
+    const failureClass: ConnectivityProbeFailureClass = isAbortLikeError(error) ? 'TIMEOUT' : 'NETWORK';
     console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: false, httpStatus: null, classifiedOnline: false, failureClass }));
     return false;
   }
