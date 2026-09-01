@@ -1,6 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import type { CanonicalActivity, CanonicalCommandResult, CanonicalOperatorWork } from './contracts.generated';
+import { createSecureCommandId } from './secureCommandId';
 
 export type OfflineCommandType = 'ACTIVITY_TRANSITION' | 'COMPLETE_SHIFT';
 export type OfflineSyncState = 'ONLINE' | 'OFFLINE' | 'SYNC_PENDING' | 'SYNC_CONFLICT';
@@ -58,7 +59,7 @@ export class OfflineDeurCommandOutbox {
   async list(): Promise<OfflineDeurCommand[]> { return this.store.read(); }
   async pendingCount(): Promise<number> { return (await this.list()).filter(item => item.syncStatus === 'LOCAL_PENDING').length; }
   async enqueue(input: Omit<OfflineDeurCommand, 'commandId' | 'idempotencyKey' | 'locallyCreatedAt' | 'localSequence' | 'syncStatus' | 'retryCount'>): Promise<OfflineDeurCommand> {
-    const items = await this.list(); const id = crypto.randomUUID();
+    const items = await this.list(); const id = createSecureCommandId();
     const nextVersion = input.expectedVersion + items.filter(item => item.deurId === input.deurId && item.syncStatus === 'LOCAL_PENDING').length;
     const envelope: OfflineDeurCommand = { ...input, expectedVersion: nextVersion, commandId: id, idempotencyKey: id, locallyCreatedAt: new Date().toISOString(), localSequence: Math.max(0, ...items.map(item => item.localSequence)) + 1, syncStatus: 'LOCAL_PENDING', retryCount: 0 };
     await this.store.write([...items, envelope]); return envelope;
