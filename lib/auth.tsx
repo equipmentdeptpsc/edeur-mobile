@@ -127,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const replayingOffline = useRef(false);
   const revalidatingSession = useRef(false);
   const turnoverHydrationRef = useRef(0);
+  const lastSuccessfulOnlineAuthorizationAt = useRef<Date | null>(null);
 
   const refreshOfflineStatus = async () => {
     if (runtime.environment.mode !== 'UAT' || !runtime.offlineOutbox) return;
@@ -158,18 +159,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })).catch(() => { /* Eligibility is optional for core work rendering and can retry on the next refresh. */ });
   };
 
+  const persistOfflineContinuation = async (work: CanonicalOperatorWork | null): Promise<boolean> => {
+    if (!runtime.offlineContinuation) return false;
+    if (!work?.openDeur) {
+      await runtime.offlineContinuation.clear();
+      setOfflineContinuationSnapshot(null);
+      return false;
+    }
+    try {
+      const authorizationAt = lastSuccessfulOnlineAuthorizationAt.current;
+      if (!authorizationAt || !await runtime.offlineContinuation.save(work, authorizationAt)) {
+        console.warn('OFFLINE_CONTINUATION_SAVE_FAILED', JSON.stringify({ reason: authorizationAt ? 'INVALID_WORK_IDENTITY' : 'MISSING_ONLINE_AUTHORIZATION', hasOpenDeur: true }));
+        return false;
+      }
+      const restored = await runtime.offlineContinuation.restore();
+      setOfflineContinuationSnapshot(restored.kind === 'eligible' || restored.kind === 'expired' ? restored.snapshot : null);
+      return true;
+    } catch {
+      console.warn('OFFLINE_CONTINUATION_SAVE_FAILED', JSON.stringify({ reason: 'LOCAL_PERSISTENCE_UNAVAILABLE', hasOpenDeur: true }));
+      return false;
+    }
+  };
+
   const applyCanonicalSession = async (authenticated: Awaited<ReturnType<NonNullable<typeof runtime.authentication>['restoreSession']>>) => {
     if (!authenticated || !runtime.workRepository) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); return false; }
+    lastSuccessfulOnlineAuthorizationAt.current = new Date();
     const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(authenticated.identity) : await runtime.workRepository.getCurrentWork(authenticated.identity).then(value=>value?[value]:[]);
     const work = works.length===1?works[0]:null; setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work); setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: authenticated.session.user.email ?? authenticated.identity.authUserId, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false }); setPendingDeurId(work?.openDeur?.id ?? null);
-    if (runtime.offlineContinuation) {
-      try {
-        if (work?.openDeur && await runtime.offlineContinuation.save(work)) {
-          const restored = await runtime.offlineContinuation.restore();
-          setOfflineContinuationSnapshot(restored.kind === 'eligible' || restored.kind === 'expired' ? restored.snapshot : null);
-        } else { await runtime.offlineContinuation.clear(); setOfflineContinuationSnapshot(null); }
-      } catch { setOfflineContinuationSnapshot(null); }
-    }
+    await persistOfflineContinuation(work);
     hydrateTurnoverTargets(works);
     return true;
   };
@@ -312,16 +329,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(canonicalWork.identity) : await runtime.workRepository.getCurrentWork(canonicalWork.identity).then(value=>value?[value]:[]); const work = works.find(item=>item.rentalLine.id===canonicalWork.rentalLine.id) ?? (works.length===1?works[0]:null); setCanonicalWorks(works); setSelectedCanonicalWork(work); setCanonicalWork(work); hydrateTurnoverTargets(works);
       setPendingDeurId(work?.openDeur?.id ?? null);
-      if (runtime.offlineContinuation) {
-        if (work?.openDeur && await runtime.offlineContinuation.save(work)) {
-          const restored = await runtime.offlineContinuation.restore();
-          setOfflineContinuationSnapshot(restored.kind === 'eligible' || restored.kind === 'expired' ? restored.snapshot : null);
-        } else { await runtime.offlineContinuation.clear(); setOfflineContinuationSnapshot(null); }
-      }
+      await persistOfflineContinuation(work);
       return true;
     } catch { return false; }
   };
-  const runCanonical = async (key: string, action: (identity: string) => Promise<CanonicalCommandResult>) => {
+  const runCanonical = async (key: string, action: (identity: string) => Promise<CanonicalCommandResult>, onAccepted?: (result: Extract<CanonicalCommandResult, { success: true }>) => Promise<void>) => {
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     let identity = commandIds.current.get(key);
     if (!identity) { identity = crypto.randomUUID(); commandIds.current.set(key, identity); }
@@ -330,6 +342,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const result = await action(identity);
       if (result.success || !result.retryable) commandIds.current.delete(key);
+      if (result.success && onAccepted) await onAccepted(result);
       if (result.success || result.refreshRequired) await refreshCanonicalWork();
       return result;
     } finally { canonicalBusyRef.current = false; setCanonicalBusy(false); }
@@ -340,7 +353,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const draftKey = 'start-draft';
     let draftId = commandIds.current.get(draftKey);
     if (!draftId) { draftId = crypto.randomUUID(); commandIds.current.set(draftKey, draftId); }
-    const result = await runCanonical('start', (identity) => runtime.commands!.start(canonicalWork, identity, draftId!, optional));
+    const result = await runCanonical('start', (identity) => runtime.commands!.start(canonicalWork, identity, draftId!, optional), async (accepted) => {
+      const openDeur = { ...accepted.record, activeActivity: 'operation' as const };
+      const startedWork = { ...canonicalWork, openDeur, dailyDeur: openDeur };
+      setCanonicalWorks(current => current.map(work => work.rentalLine.id === startedWork.rentalLine.id ? startedWork : work));
+      setSelectedCanonicalWork(startedWork); setCanonicalWork(startedWork); setPendingDeurId(openDeur.id);
+      await persistOfflineContinuation(startedWork);
+    });
     if (result.success || !result.retryable) commandIds.current.delete(draftKey);
     return result;
   };
