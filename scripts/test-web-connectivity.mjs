@@ -12,6 +12,10 @@ new Function('require', 'module', 'exports', output)((name) => {
 }, module, module.exports);
 
 const { canonicalConnectivityProbeUrl, probeCanonicalConnectivity } = module.exports;
+const { isAbortLikeError } = module.exports;
+Object.defineProperty(globalThis, 'DOMException', { configurable: true, value: undefined });
+assert.equal(isAbortLikeError({ name: 'AbortError' }), true, 'abort-like errors classify without DOMException');
+assert.equal(isAbortLikeError(new TypeError('Failed to fetch')), false, 'network errors remain non-abort failures');
 assert.equal(canonicalConnectivityProbeUrl('https://psc-ed-uat.equipmentdept-psc.workers.dev'), 'https://psc-ed-uat.equipmentdept-psc.workers.dev/api/auth/username-login');
 
 const originalFetch = globalThis.fetch;
