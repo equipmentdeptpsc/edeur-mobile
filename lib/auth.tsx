@@ -4,7 +4,7 @@ import type { Operator } from './types';
 import type { CanonicalActivity, CanonicalCommandResult, CanonicalOperatorWork } from './canonical/contracts.generated';
 import { mobileRuntime as runtime } from './canonical/runtime';
 import { CanonicalAuthenticationError } from './canonical/authentication';
-import { probeCanonicalConnectivity, useConnectivity } from './useConnectivity';
+import { canonicalConnectivityProbeUrl, probeCanonicalConnectivity, useConnectivity } from './useConnectivity';
 import type { OfflineSyncState } from './canonical/offlineOutbox';
 import type { OfflineContinuationSnapshot } from './canonical/offlineContinuation';
 
@@ -115,7 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [selectedCanonicalWork, setSelectedCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [pendingDeurId, setPendingDeurId] = useState<string | null>(loadPendingDeurId());
   const [canonicalBusy, setCanonicalBusy] = useState(false);
-  const connectivity = useConnectivity(runtime.environment.apiBaseUrl);
+  const connectivityProbeUrl = canonicalConnectivityProbeUrl(runtime.environment.apiBaseUrl);
+  const connectivity = useConnectivity(connectivityProbeUrl);
   const [offlineSyncState, setOfflineSyncState] = useState<OfflineSyncState>('ONLINE');
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
   const [uatSessionState, setUatSessionState] = useState<UatSessionState>(runtime.environment.mode === 'UAT' ? 'INITIALIZING' : 'ONLINE_AUTHENTICATED');
@@ -142,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const state = await runtime.offlineOutbox.replay((item) => item.commandType === 'ACTIVITY_TRANSITION'
         ? runtime.commands!.transition(item.work, item.deurId, item.expectedVersion, item.payload.activity!, item.idempotencyKey, item.payload.idleReason)
         : runtime.commands!.endShift(item.work, item.deurId, item.expectedVersion, item.idempotencyKey, item.payload.evidence));
+      console.info('OUTBOX_REPLAY_RESULT', JSON.stringify({ state }));
       await refreshOfflineStatus(); if (state === 'SYNC_CONFLICT') setOfflineSyncState('SYNC_CONFLICT');
       if (state === 'ONLINE') await refreshCanonicalWork();
     } finally { replayingOffline.current = false; }
@@ -208,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       setUatSessionState('INITIALIZING');
-      const online = await probeCanonicalConnectivity(runtime.environment.apiBaseUrl);
+      const online = await probeCanonicalConnectivity(connectivityProbeUrl);
       if (!cancelled && online) {
         try {
           const session = await runtime.authentication!.restoreSession();
@@ -228,12 +230,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!runtime.authentication || revalidatingSession.current) return;
     revalidatingSession.current = true;
     void (async () => {
+      console.info('REVALIDATION_START');
       try {
         const session = await runtime.authentication!.restoreSession();
-        if (!await applyCanonicalSession(session)) { setUatSessionState('REAUTH_REQUIRED'); setOfflineSyncState('SYNC_CONFLICT'); return; }
+        if (!await applyCanonicalSession(session)) { console.info('REVALIDATION_RESULT', JSON.stringify({ success: false, reason: 'SESSION_OR_WORK_REJECTED' })); setUatSessionState('REAUTH_REQUIRED'); setOfflineSyncState('SYNC_CONFLICT'); return; }
         setUatSessionState('ONLINE_AUTHENTICATED');
+        console.info('REVALIDATION_RESULT', JSON.stringify({ success: true, reason: null }));
+        console.info('OUTBOX_REPLAY_START');
         await replayOffline(true);
-      } catch { setUatSessionState('REAUTH_REQUIRED'); setOfflineSyncState('SYNC_CONFLICT'); }
+      } catch { console.info('REVALIDATION_RESULT', JSON.stringify({ success: false, reason: 'REVALIDATION_FAILED' })); setUatSessionState('REAUTH_REQUIRED'); setOfflineSyncState('SYNC_CONFLICT'); }
       finally { revalidatingSession.current = false; }
     })();
   }, [connectivity, uatSessionState]);

@@ -12,18 +12,33 @@ export type ConnectionStatus =
 const HEARTBEAT_INTERVAL_MS = 15000;
 const HEARTBEAT_TIMEOUT_MS = 5000;
 
+/** The username route is public for method negotiation and has the isolated-UAT Web CORS contract. */
+export function canonicalConnectivityProbeUrl(apiBaseUrl?: string): string | undefined {
+  if (!apiBaseUrl) return undefined;
+  try { return new URL('/api/auth/username-login', apiBaseUrl).toString(); }
+  catch { return undefined; }
+}
+
 /** A reachable endpoint may reject an unauthenticated probe; reachability is sufficient here. */
 export async function probeCanonicalConnectivity(probeUrl?: string): Promise<boolean> {
-  if (Platform.OS === 'web' && typeof navigator !== 'undefined' && !navigator.onLine) return false;
+  if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   const target = probeUrl ?? (Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : undefined);
   if (!target) return false;
+  console.info('CONNECTIVITY_PROBE_START', JSON.stringify({ target: new URL(target).pathname || '/' }));
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), HEARTBEAT_TIMEOUT_MS);
-    try { await fetch(target, { method: 'GET', cache: 'no-store', signal: controller.signal }); }
+    try {
+      const response = await fetch(target, { method: 'GET', cache: 'no-store', signal: controller.signal });
+      console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: true, httpStatus: response.status, classifiedOnline: true, failureClass: null }));
+    }
     finally { clearTimeout(timeoutId); }
     return true;
-  } catch { return false; }
+  } catch (error) {
+    const failureClass = error instanceof DOMException && error.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_OR_CORS';
+    console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: false, httpStatus: null, classifiedOnline: false, failureClass }));
+    return false;
+  }
 }
 
 export function useConnectivity(probeUrl?: string): ConnectionStatus {
