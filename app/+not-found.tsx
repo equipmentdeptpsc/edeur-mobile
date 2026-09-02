@@ -1,7 +1,11 @@
-import { Link, Stack } from 'expo-router';
+import { Link, Stack, usePathname, useSegments } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 export default function NotFoundScreen() {
+  const pathname = usePathname();
+  const segments = useSegments();
+  useEffect(() => { console.info('NOT_FOUND_RENDER', JSON.stringify({ pathname, segments })); }, [pathname, segments]);
   return (
     <>
       <Stack.Screen options={{ title: 'Oops!' }} />

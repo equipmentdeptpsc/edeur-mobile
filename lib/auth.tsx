@@ -122,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [offlineSyncState, setOfflineSyncState] = useState<OfflineSyncState>('ONLINE');
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
   const [uatSessionState, setUatSessionState] = useState<UatSessionState>(runtime.environment.mode === 'UAT' ? 'INITIALIZING' : 'ONLINE_AUTHENTICATED');
+  useEffect(() => { if (runtime.environment.mode === 'UAT') console.info('AUTH_PROVIDER_RENDER', JSON.stringify({ operator: operator === undefined ? 'undefined' : operator ? 'authenticated' : 'signed-out', uatSessionState })); }, [operator, uatSessionState]);
   const [offlineContinuationSnapshot, setOfflineContinuationSnapshot] = useState<OfflineContinuationSnapshot | null>(null);
   const [requiresOnlineFirstSignIn, setRequiresOnlineFirstSignIn] = useState(false);
   const loginErrorRef = useRef<string | null>(null);
