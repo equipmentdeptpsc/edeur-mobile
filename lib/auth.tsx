@@ -8,6 +8,7 @@ import { canonicalConnectivityProbeUrl, probeCanonicalConnectivity, useConnectiv
 import type { OfflineSyncState } from './canonical/offlineOutbox';
 import type { OfflineContinuationSnapshot } from './canonical/offlineContinuation';
 import { createSecureCommandId } from './canonical/secureCommandId';
+import { isDeurReadOnly } from './canonical/deurLifecycle';
 
 export type UatSessionState = 'INITIALIZING' | 'ONLINE_AUTHENTICATED' | 'OFFLINE_CONTINUATION' | 'OFFLINE_EXPIRED' | 'REAUTH_REQUIRED' | 'SIGNED_OUT';
 
@@ -372,6 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const transitionCanonicalActivity: AuthContextValue['transitionCanonicalActivity'] = async (activity, reason) => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    if (isDeurReadOnly(deur.status)) return failure('DEUR_READ_ONLY');
     if (connectivity === 'offline' && uatSessionState === 'OFFLINE_CONTINUATION' && runtime.offlineOutbox) {
       await runtime.offlineOutbox.enqueue({ commandType: 'ACTIVITY_TRANSITION', deurId: deur.id, rentalEquipmentLineId: canonicalWork.rentalLine.id, operatorId: canonicalWork.identity.operatorId, expectedVersion: deur.rowVersion, work: canonicalWork, payload: { activity, ...(reason ? { idleReason: reason } : {}) } });
       await refreshOfflineStatus(); return failure('LOCAL_PENDING');
@@ -382,6 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const endCanonicalShift: AuthContextValue['endCanonicalShift'] = async (evidence = {}) => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    if (isDeurReadOnly(deur.status)) return failure('DEUR_READ_ONLY');
     if (connectivity === 'offline' && uatSessionState === 'OFFLINE_CONTINUATION' && runtime.offlineOutbox) {
       await runtime.offlineOutbox.enqueue({ commandType: 'COMPLETE_SHIFT', deurId: deur.id, rentalEquipmentLineId: canonicalWork.rentalLine.id, operatorId: canonicalWork.identity.operatorId, expectedVersion: deur.rowVersion, work: canonicalWork, payload: { evidence } });
       await refreshOfflineStatus(); return failure('LOCAL_PENDING');
@@ -392,12 +395,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const submitCanonicalDeur = async () => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    if (isDeurReadOnly(deur.status)) return failure('DEUR_READ_ONLY');
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_SUBMIT');
     return runCanonical('submit', (identity) => runtime.commands!.submit(canonicalWork, deur.id, deur.rowVersion, identity));
   };
   const initiateCanonicalTurnover = async (targetOperatorId: string): Promise<{ success: boolean; code?: string }> => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    if (isDeurReadOnly(deur.status)) return failure('DEUR_READ_ONLY');
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
     if (!canonicalWork.turnoverTargets?.some(target => target.operatorId === targetOperatorId)) return failure('TARGET_OPERATOR_NOT_ELIGIBLE');
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
@@ -412,6 +417,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const acceptCanonicalTurnover = async (): Promise<{ success: boolean; code?: string }> => {
     const turnoverId = canonicalWork?.custody?.turnoverId;
     if (!canonicalWork || canonicalWork.custody?.turnoverStatus !== 'PENDING' || !turnoverId || !runtime.commands) return failure('NO_PENDING_TURNOVER');
+    const deur = canonicalWork.openDeur ?? canonicalWork.dailyDeur;
+    if (deur && isDeurReadOnly(deur.status)) return failure('DEUR_READ_ONLY');
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     canonicalBusyRef.current = true; setCanonicalBusy(true);
