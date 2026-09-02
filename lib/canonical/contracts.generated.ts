@@ -30,7 +30,7 @@ export interface CanonicalOperatorWork {
   equipment: { id: string; name: string; assetNumber: string; currentReading?: number };
   rental: { id: string; rentalNumber: string; status: string; billingMethod?: string };
   rentalLine: { id: string; status: string; operationalMetadata: Record<string, unknown> };
-  custody?: { primaryOperatorId: string; currentAuthorizedOperatorId: string; turnoverId?: string; turnoverToOperatorId?: string; turnoverStatus: 'PENDING' | 'ACCEPTED' };
+  custody?: { primaryOperatorId: string; primaryOperatorDisplayName?: string; currentAuthorizedOperatorId: string; currentAuthorizedOperatorDisplayName?: string; turnoverId?: string; turnoverToOperatorId?: string; turnoverStatus: 'PENDING' | 'ACCEPTED' };
   openDeur?: CanonicalOpenDeur;
   dailyDeur?: CanonicalOpenDeur;
   turnoverTargets?: CanonicalTurnoverOperator[];

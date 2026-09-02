@@ -27,6 +27,7 @@ check(loginScreen.includes("getLoginError() ?? 'Canonical sign-in failed.'")&&!l
 check(auth.includes("from('users')")&&auth.includes("from('operators')")&&auth.includes("status !== 'active'"),'authenticated user and linked active Operator are required');
 check(authContext.includes("runtime.environment.mode === 'UAT'")&&authContext.includes('runtime.authentication.signIn')&&authContext.includes("runtime.environment.mode !== 'DEMO'"),'UAT app auth uses canonical session and disables PIN turnover paths');
 check(work.includes('read_current_operator_deur_turnover_work')&&work.includes('turnoverStatus')&&work.includes('currentAuthorizedOperatorId'),'reliever work is projected only through the canonical turnover RPC');
+check(work.includes('primaryOperatorDisplayName')&&work.includes('currentAuthorizedOperatorDisplayName')&&canonicalPanel.includes('custodyDisplayName'),'turnover custody labels use canonical display names with a safe fallback');
 check(commands.includes('command_initiate_deur_turnover')&&commands.includes('command_accept_deur_turnover'),'turnover commands remain canonical RPC calls');
 check(offlineOutbox.includes('expo-file-system')&&offlineOutbox.includes("'ACTIVITY_TRANSITION' | 'COMPLETE_SHIFT'")&&offlineOutbox.includes('localSequence'),'offline outbox is durable and limited to pilot-safe commands');
 check(offlineOutbox.includes("Platform.OS === 'web' ? null : new File")&&offlineOutbox.includes('if (Platform.OS === \'web\') return this.readWeb();'),'web outbox never constructs Expo FileSystem File objects');
