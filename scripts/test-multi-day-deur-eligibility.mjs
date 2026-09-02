@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 const source=readFileSync('lib/repositories/SupabaseOperatorWorkRepository.ts','utf8');
 const checks=[
   [source.includes("rpc('read_uat_limited_pilot_operator_work_date'"),'authoritative pilot work date is read from the authenticated canonical RPC'],
-  [source.includes('if(work.dailyDeur?.workDate!==effectiveWorkDate)delete work.dailyDeur;'),'a prior-day terminal DEUR cannot occupy the current daily slot'],
+  [source.includes('delete work.dailyDeur;')&&source.includes('// The pilot clock is authoritative.'),'server pilot clock rehydrates the daily slot and clears stale device projections'],
   [source.includes(".eq('work_date',effectiveWorkDate)"),'same-day DEUR lookup uses the server work date'],
-  [source.includes('if(work.openDeur||work.dailyDeur)continue;'),'prior open DEUR and same-day DEUR retain their canonical block'],
+  [source.includes('if(work.openDeur)continue;'),'prior open DEUR retains its canonical block'],
   [source.includes('if(!isDate(effectiveWorkDate))continue;'),'non-pilot work retains existing canonical selection behavior'],
   [source.includes('Canonical pilot daily DEUR projection failed.'),'the pilot projection fails closed rather than inventing availability'],
 ];
