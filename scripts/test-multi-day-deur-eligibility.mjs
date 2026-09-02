@@ -7,6 +7,7 @@ const checks=[
   [source.includes(".eq('work_date',effectiveWorkDate)"),'same-day DEUR lookup uses the server work date'],
   [source.includes('if(work.openDeur)continue;'),'prior open DEUR retains its canonical block'],
   [source.includes('if(!isDate(effectiveWorkDate))continue;'),'non-pilot work retains existing canonical selection behavior'],
+  [source.includes('if(!isDeurOpenForOperatorMutation(status))continue;'),'submitted turnover history is excluded from the current-work merge'],
   [source.includes('Canonical pilot daily DEUR projection failed.'),'the pilot projection fails closed rather than inventing availability'],
 ];
 let failed=0;
@@ -20,12 +21,15 @@ const resolveDaily=({open,daily,serverDate,byDate})=>{
 const submitted={workDate:'2026-09-01',status:'Submitted'};
 const sameDaySubmitted={workDate:'2026-09-02',status:'Submitted'};
 const priorOpen={workDate:'2026-09-01',status:'In Progress'};
+const mergeTurnoverWork=(assignmentWork,turnoverWork)=>turnoverWork.status==='Draft'||turnoverWork.status==='In Progress'?{...assignmentWork,openDeur:turnoverWork,dailyDeur:turnoverWork}:assignmentWork;
 const cases=[
   [resolveDaily({daily:submitted,serverDate:'2026-09-02',byDate:[submitted]})===undefined,'previous-day submitted is historical and Start remains eligible'],
   [resolveDaily({daily:sameDaySubmitted,serverDate:'2026-09-02',byDate:[sameDaySubmitted]})===sameDaySubmitted,'same-day submitted suppresses duplicate Start'],
   [resolveDaily({open:priorOpen,serverDate:'2026-09-02',byDate:[]})===undefined,'prior-day open remains outside daily selection while canonical openDeur blocks Start'],
   [resolveDaily({daily:submitted,serverDate:'2026-09-02',byDate:[sameDaySubmitted]})===sameDaySubmitted,'server date wins when device-derived daily selection is stale'],
   [submitted.status==='Submitted'&&submitted.workDate==='2026-09-01','historical submitted DEUR is preserved for history'],
+  [mergeTurnoverWork({dailyDeur:undefined},{...submitted,turnoverStatus:'ACCEPTED'}).dailyDeur===undefined,'submitted accepted turnover history cannot mask next-day eligible work'],
+  [mergeTurnoverWork({dailyDeur:undefined},{...priorOpen,turnoverStatus:'ACCEPTED'}).openDeur?.status==='In Progress','genuinely open accepted turnover remains current work'],
 ];
 for(const [passed,label] of cases){console.log(`${passed?'PASS':'FAIL'}: ${label}`);if(!passed)failed++;}
 process.exitCode=failed?1:0;
