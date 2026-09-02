@@ -1,4 +1,4 @@
-import { canonicalEnvironmentDiagnostics, readCanonicalEnvironment, type CanonicalEnvironment } from './environment';
+import { canonicalEnvironmentDiagnostics, readCanonicalEnvironment, resolvedRuntimeMode, type CanonicalEnvironment } from './environment';
 import { createCanonicalClient } from './client';
 import { CanonicalAuthenticationRepository } from './authentication';
 import { CanonicalDeurCommandRepository } from './commandRepository';
@@ -31,7 +31,7 @@ export function createMobileRuntime(): CanonicalRuntime {
     // Demo is explicit opt-in. If UAT configuration fails (including when
     // Expo was started without .env.uat), remain in UAT and surface the
     // configuration blocker instead of silently rendering the demo PIN flow.
-    const mode: CanonicalEnvironment['mode']=process.env.EXPO_PUBLIC_EDEUR_MODE?.trim()==='DEMO'?'DEMO':'UAT';
+    const mode: CanonicalEnvironment['mode']=resolvedRuntimeMode();
     const configurationError=error instanceof Error?error.message:'Canonical configuration failed.';
     const environment={mode};
     console.info('EDEUR_RUNTIME_CONFIGURATION',JSON.stringify(canonicalEnvironmentDiagnostics(environment,configurationError)));
