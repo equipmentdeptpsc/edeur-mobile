@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const source = fs.readFileSync('lib/useConnectivity.ts', 'utf8');
-assert.match(source, /const \[status, setStatus\] = useState<ConnectionStatus>\('offline'\)/, 'initial connectivity state is fail-closed');
+assert.match(source, /let sharedStatus: ConnectionStatus = 'offline'/, 'initial connectivity state is fail-closed');
+assert.match(source, /sharedStatus/, 'connectivity state is shared across hook instances');
+assert.match(source, /confirmedOnlineGeneration/, 'stale offline results cannot overwrite a confirmed online probe');
 assert.match(source, /Platform\.OS === 'web' \? undefined : AppState\.addEventListener/, 'native app activation triggers a fresh connectivity probe');
 assert.match(source, /setInterval\(\(\) => \{ void checkConnectivity\(\); \}, HEARTBEAT_INTERVAL_MS\)/, 'native and web receive periodic transport probes');
 assert.match(source, /probeCanonicalConnectivity\(probeUrl\)/, 'connectivity state uses the configured canonical endpoint');

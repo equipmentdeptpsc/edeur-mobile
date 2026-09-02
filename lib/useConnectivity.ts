@@ -12,6 +12,20 @@ export type ConnectivityProbeFailureClass = 'TIMEOUT' | 'NETWORK';
 
 const HEARTBEAT_INTERVAL_MS = 15000;
 const HEARTBEAT_TIMEOUT_MS = 5000;
+let sharedStatus: ConnectionStatus = 'offline';
+const subscribers = new Set<(status: ConnectionStatus) => void>();
+let ownerActive = false;
+let ownerCleanup: (() => void) | undefined;
+let probeGeneration = 0;
+let confirmedOnlineGeneration = 0;
+
+function publish(status: ConnectionStatus, generation: number) {
+  if (status === 'offline' && generation < confirmedOnlineGeneration) return;
+  if (status === 'online') confirmedOnlineGeneration = Math.max(confirmedOnlineGeneration, generation);
+  sharedStatus = status;
+  console.info('CONNECTIVITY_STATE_SET', JSON.stringify({ status }));
+  subscribers.forEach(listener => listener(status));
+}
 
 /** The username route is public for method negotiation and has the isolated-UAT Web CORS contract. */
 export function canonicalConnectivityProbeUrl(apiBaseUrl?: string): string | undefined {
@@ -59,21 +73,19 @@ export async function probeCanonicalConnectivity(probeUrl?: string): Promise<boo
 
 export function useConnectivity(probeUrl?: string): ConnectionStatus {
   // Start fail-closed. UAT startup performs a real probe before restoring either mode.
-  const [status, setStatus] = useState<ConnectionStatus>('offline');
-  const mountedRef = useRef(true);
+  const [status, setStatus] = useState<ConnectionStatus>(sharedStatus);
   console.info('CONNECTIVITY_HOOK_RENDER', JSON.stringify({ status }));
 
   useEffect(() => {
+    subscribers.add(setStatus);
+    if (ownerActive) return () => { subscribers.delete(setStatus); };
+    ownerActive = true;
     console.info('CONNECTIVITY_EFFECT_ENTER', JSON.stringify({ platform: Platform.OS }));
-    mountedRef.current = true;
-
+    let active = true;
     const checkConnectivity = async () => {
+      const generation = ++probeGeneration;
       const online = await probeCanonicalConnectivity(probeUrl);
-      if (mountedRef.current) {
-        const nextStatus = online ? 'online' : 'offline';
-        console.info('CONNECTIVITY_STATE_SET', JSON.stringify({ status: nextStatus }));
-        setStatus(nextStatus);
-      }
+      if (active) publish(online ? 'online' : 'offline', generation);
     };
 
     checkConnectivity();
@@ -83,22 +95,15 @@ export function useConnectivity(probeUrl?: string): ConnectionStatus {
       if (next === 'active') void checkConnectivity();
     });
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.addEventListener) {
-      const handleOffline = () => { if (mountedRef.current) setStatus('offline'); };
+    const cleanupListeners = Platform.OS === 'web' && typeof window !== 'undefined' && window.addEventListener ? (() => {
+      const handleOffline = () => publish('offline', ++probeGeneration);
       const handleOnline = () => { void checkConnectivity(); };
       window.addEventListener('offline', handleOffline);
       window.addEventListener('online', handleOnline);
-
-      return () => {
-        mountedRef.current = false;
-        window.removeEventListener('offline', handleOffline);
-        window.removeEventListener('online', handleOnline);
-        clearInterval(intervalId);
-        appStateSubscription?.remove();
-      };
-    }
-
-    return () => { mountedRef.current = false; clearInterval(intervalId); appStateSubscription?.remove(); };
+      return () => { window.removeEventListener('offline', handleOffline); window.removeEventListener('online', handleOnline); };
+    })() : undefined;
+    ownerCleanup = () => { active = false; clearInterval(intervalId); appStateSubscription?.remove(); cleanupListeners?.(); ownerActive = false; ownerCleanup = undefined; };
+    return () => { subscribers.delete(setStatus); if (subscribers.size === 0) ownerCleanup?.(); };
   }, [probeUrl]);
 
   return status;
