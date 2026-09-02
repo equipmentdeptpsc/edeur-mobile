@@ -131,6 +131,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const revalidatingSession = useRef(false);
   const turnoverHydrationRef = useRef(0);
   const lastSuccessfulOnlineAuthorizationAt = useRef<Date | null>(null);
+  const withBootstrapTimeout = async <T,>(operation: Promise<T>, timeoutMs = 12000): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([operation, new Promise<T>((_, reject) => { timeoutId = setTimeout(() => reject(new Error('BOOTSTRAP_TIMEOUT')), timeoutMs); })]);
+    } finally { if (timeoutId) clearTimeout(timeoutId); }
+  };
 
   const refreshOfflineStatus = async () => {
     if (runtime.environment.mode !== 'UAT' || !runtime.offlineOutbox) return;
@@ -216,7 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!cancelled && online) {
         try {
           const session = await runtime.authentication!.restoreSession();
-          if (await applyCanonicalSession(session)) { if (!cancelled) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); } return; }
+          if (await withBootstrapTimeout(applyCanonicalSession(session))) { if (!cancelled) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); } return; }
         } catch { /* A reachable service without a valid session is signed out, not offline continuation. */ }
       }
       if (!cancelled && !online && await restoreOfflineContinuation()) { setRequiresOnlineFirstSignIn(false); return; }
