@@ -40,12 +40,15 @@ export class CanonicalAuthenticationRepository {
     return new Promise((resolve) => {
       let settled = false;
       let unsubscribe: (() => void) | undefined;
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const finish = (session: Session | null) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeoutId);
         unsubscribe?.();
         resolve(session);
       };
+      timeoutId = setTimeout(() => finish(null), 8000);
       const { data } = this.client.auth.onAuthStateChange((event, session) => {
         if (event === 'INITIAL_SESSION') finish(session);
       });
