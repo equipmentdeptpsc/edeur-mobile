@@ -13,7 +13,8 @@
     "test:post-submit": "node scripts/test-post-submit-projection.mjs",
     "test:turnover-ui": "node scripts/test-turnover-ui.mjs",
     "test:session-hydration": "node scripts/test-session-hydration.mjs",
-    "test:keep-awake": "node scripts/test-keep-awake.mjs"
+    "test:keep-awake": "node scripts/test-keep-awake.mjs",
+    "test:routing-bootstrap": "node scripts/test-routing-bootstrap.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "^0.4.2",
