@@ -21,11 +21,11 @@ export function createMobileRuntime(): CanonicalRuntime {
   try {
     const environment=readCanonicalEnvironment();
     if(environment.mode==='DEMO'){
-      console.info('EDEUR_RUNTIME_CONFIGURATION',JSON.stringify(canonicalEnvironmentDiagnostics(environment,null)));
+      console.log('EDEUR_RUNTIME_CONFIGURATION',JSON.stringify(canonicalEnvironmentDiagnostics(environment,null)));
       return{environment,configurationError:null,workRepository:selectOperatorWorkRepository(environment)};
     }
     const client=createCanonicalClient(environment);
-    console.info('EDEUR_RUNTIME_CONFIGURATION',JSON.stringify(canonicalEnvironmentDiagnostics(environment,null)));
+    console.log('EDEUR_RUNTIME_CONFIGURATION',JSON.stringify(canonicalEnvironmentDiagnostics(environment,null)));
     return{environment,configurationError:null,authentication:new CanonicalAuthenticationRepository(client,environment),workRepository:selectOperatorWorkRepository(environment,client),commands:new CanonicalDeurCommandRepository(client),offlineOutbox:new OfflineDeurCommandOutbox(),offlineContinuation:new OfflineContinuationRepository()};
   }catch(error){
     // Demo is explicit opt-in. If UAT configuration fails (including when
@@ -34,7 +34,7 @@ export function createMobileRuntime(): CanonicalRuntime {
     const mode: CanonicalEnvironment['mode']=resolvedRuntimeMode();
     const configurationError=error instanceof Error?error.message:'Canonical configuration failed.';
     const environment={mode};
-    console.info('EDEUR_RUNTIME_CONFIGURATION',JSON.stringify(canonicalEnvironmentDiagnostics(environment,configurationError)));
+    console.log('EDEUR_RUNTIME_CONFIGURATION',JSON.stringify(canonicalEnvironmentDiagnostics(environment,configurationError)));
     return{environment,configurationError};
   }
 }
