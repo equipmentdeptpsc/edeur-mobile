@@ -24,7 +24,7 @@ console.log('=== Canonical Mobile Integration Contract Tests ===');
 check(environment.includes("mode === 'DEMO'")&&environment.includes('canonical configuration is incomplete'),'UAT configuration fails closed');
 check(runtime.includes('resolvedRuntimeMode()')&&environment.includes("=== 'DEMO' ? 'DEMO' : 'UAT'"),'configuration failure cannot silently select Demo mode');
 check(environment.includes("projectRef !== 'jtkctarqbwmqdcewthkn'"),'UAT project ref is pinned to isolated UAT');
-check(packageJson.includes('"dev:uat": "node --env-file=.env.uat ./node_modules/expo/bin/cli start --clear --lan"'),'physical UAT startup always loads .env.uat with a clean LAN bundle');
+check(packageJson.includes('"dev:uat": "node ./node_modules/expo/bin/cli start --clear --lan"')&&read('app.config.js').includes('LOCAL_ENV_UAT_FILE'),'physical UAT startup uses app config to load .env.uat with a clean LAN bundle');
 check(read('app.config.js').includes('LOCAL_ENV_UAT_FILE')&&environment.includes('Constants.expoConfig?.extra')&&!environment.includes('process.env.EXPO_PUBLIC_'),'app configuration is the sole mobile runtime source instead of a Metro process environment read');
 check(environment.includes('canonicalEnvironmentDiagnostics')&&environment.includes("demoFallback: 'DISABLED'")&&runtime.includes('resolvedRuntimeMode()'),'runtime diagnostics are safe and only an explicit app-config DEMO mode can select demo');
 check(!auth.includes('mockRepository')&&auth.includes('signInWithPassword')&&auth.includes('/api/auth/username-login'),'canonical auth cannot use mock/PIN identities');

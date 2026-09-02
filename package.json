@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
-    "dev:uat": "node --env-file=.env.uat ./node_modules/expo/bin/cli start --clear --lan",
+    "dev:uat": "node ./node_modules/expo/bin/cli start --clear --lan",
     "web:uat": "node --env-file=.env.uat ./node_modules/expo/bin/cli start --clear --web",
     "build:web": "expo export --platform web",
     "lint": "expo lint",
