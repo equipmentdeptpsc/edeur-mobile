@@ -32,19 +32,26 @@ export async function probeCanonicalConnectivity(probeUrl?: string): Promise<boo
   if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   const target = probeUrl ?? (Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : undefined);
   if (!target) return false;
-  console.info('CONNECTIVITY_PROBE_START', JSON.stringify({ target: new URL(target).pathname || '/' }));
+  console.info('CONNECTIVITY_PROBE_START', JSON.stringify({ platform: Platform.OS }));
   try {
     const controller = typeof AbortController === 'function' ? new AbortController() : undefined;
     const response = await new Promise<Response>((resolve, reject) => {
       let settled = false;
       const finish = (action: () => void) => { if (settled) return; settled = true; clearTimeout(timeoutId); action(); };
-      const timeoutId = setTimeout(() => { controller?.abort(); finish(() => reject(Object.assign(new Error('CONNECTIVITY_TIMEOUT'), { name: 'AbortError' }))); }, HEARTBEAT_TIMEOUT_MS);
+      console.info('CONNECTIVITY_PROBE_TIMEOUT_ARMED');
+      const timeoutId = setTimeout(() => {
+        console.info('CONNECTIVITY_PROBE_TIMEOUT_FIRED');
+        controller?.abort();
+        finish(() => reject(Object.assign(new Error('CONNECTIVITY_TIMEOUT'), { name: 'AbortError' })));
+      }, HEARTBEAT_TIMEOUT_MS);
       void fetch(target, { method: 'GET', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) }).then(value => finish(() => resolve(value))).catch(error => finish(() => reject(error)));
     });
+    console.info('CONNECTIVITY_PROBE_RESOLVED', JSON.stringify({ online: true }));
     console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: true, httpStatus: response.status, classifiedOnline: true, failureClass: null }));
     return true;
   } catch (error) {
     const failureClass: ConnectivityProbeFailureClass = isAbortLikeError(error) ? 'TIMEOUT' : 'NETWORK';
+    console.info('CONNECTIVITY_PROBE_RESOLVED', JSON.stringify({ online: false, failureClass }));
     console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: false, httpStatus: null, classifiedOnline: false, failureClass }));
     return false;
   }
@@ -54,13 +61,19 @@ export function useConnectivity(probeUrl?: string): ConnectionStatus {
   // Start fail-closed. UAT startup performs a real probe before restoring either mode.
   const [status, setStatus] = useState<ConnectionStatus>('offline');
   const mountedRef = useRef(true);
+  console.info('CONNECTIVITY_HOOK_RENDER', JSON.stringify({ status }));
 
   useEffect(() => {
+    console.info('CONNECTIVITY_EFFECT_ENTER', JSON.stringify({ platform: Platform.OS }));
     mountedRef.current = true;
 
     const checkConnectivity = async () => {
       const online = await probeCanonicalConnectivity(probeUrl);
-      if (mountedRef.current) setStatus(online ? 'online' : 'offline');
+      if (mountedRef.current) {
+        const nextStatus = online ? 'online' : 'offline';
+        console.info('CONNECTIVITY_STATE_SET', JSON.stringify({ status: nextStatus }));
+        setStatus(nextStatus);
+      }
     };
 
     checkConnectivity();

@@ -220,13 +220,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (runtime.environment.mode !== 'UAT' || !runtime.authentication) return;
+    console.info('AUTH_INIT_EFFECT_ENTER', JSON.stringify({ mode: runtime.environment.mode, hasAuthentication: Boolean(runtime.authentication), hasWorkRepository: Boolean(runtime.workRepository), hasConfigurationError: Boolean(runtime.configurationError), connectivity }));
     let cancelled = false;
-    void (async () => {
-      console.info('AUTH_INIT_EFFECT_START');
-      setUatSessionState('INITIALIZING');
-      const online = await probeCanonicalConnectivity(connectivityProbeUrl);
-      if (!cancelled && online) {
+    const finishSignedOut = (reason: string, online: boolean) => {
+      if (cancelled) { console.info('AUTH_INIT_RESULT_IGNORED_CANCELLED', JSON.stringify({ reason })); return; }
+      setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); setRequiresOnlineFirstSignIn(!online); setUatSessionState('SIGNED_OUT');
+      console.info('AUTH_INIT_SET_OPERATOR', JSON.stringify({ value: 'null' }));
+      console.info('AUTH_INIT_SET_STATE', JSON.stringify({ state: 'SIGNED_OUT', reason }));
+    };
+    const cleanup = () => { cancelled = true; console.info('AUTH_INIT_EFFECT_CLEANUP'); };
+    try {
+      if (runtime.environment.mode !== 'UAT') { console.info('AUTH_INIT_EFFECT_GUARD', JSON.stringify({ reason: 'NON_UAT_MODE', connectivity })); return cleanup; }
+      if (!runtime.authentication) { console.info('AUTH_INIT_EFFECT_GUARD', JSON.stringify({ reason: 'AUTHENTICATION_UNAVAILABLE', connectivity, hasConfigurationError: Boolean(runtime.configurationError) })); finishSignedOut('AUTHENTICATION_UNAVAILABLE', false); return cleanup; }
+      void (async () => {
+        console.info('AUTH_INIT_EFFECT_START');
+        setUatSessionState('INITIALIZING');
+        const onlinePromise = probeCanonicalConnectivity(connectivityProbeUrl);
         let session: Awaited<ReturnType<NonNullable<typeof runtime.authentication>['restoreSession']>> = null;
         try {
           console.info('AUTH_INITIAL_SESSION_CALL');
@@ -234,19 +243,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           console.info('AUTH_INITIAL_SESSION_REJECTED', JSON.stringify({ errorClass: error instanceof Error ? error.name : typeof error }));
         }
-        try {
-          console.info('AUTH_WORK_HYDRATION_START');
-          const hydrated = await withBootstrapTimeout(applyCanonicalSession(session));
-          console.info('AUTH_WORK_HYDRATION_RESOLVED', JSON.stringify({ success: hydrated }));
-          if (hydrated) { if (!cancelled) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); console.info('AUTH_INIT_SET_OPERATOR', JSON.stringify({ value: 'object' })); console.info('AUTH_INIT_SET_STATE', JSON.stringify({ state: 'ONLINE_AUTHENTICATED' })); } return; }
-        } catch (error) {
-          console.info('AUTH_WORK_HYDRATION_RESOLVED', JSON.stringify({ success: false, errorClass: error instanceof Error ? error.name : typeof error }));
+        const online = await onlinePromise;
+        if (!cancelled && online) {
+          try {
+            console.info('AUTH_WORK_HYDRATION_START');
+            const hydrated = await withBootstrapTimeout(applyCanonicalSession(session));
+            console.info('AUTH_WORK_HYDRATION_RESOLVED', JSON.stringify({ success: hydrated }));
+            if (hydrated) { if (!cancelled) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); console.info('AUTH_INIT_SET_OPERATOR', JSON.stringify({ value: 'object' })); console.info('AUTH_INIT_SET_STATE', JSON.stringify({ state: 'ONLINE_AUTHENTICATED' })); } else { console.info('AUTH_INIT_RESULT_IGNORED_CANCELLED', JSON.stringify({ reason: 'ONLINE_AUTHENTICATED' })); } return; }
+          } catch (error) {
+            console.info('AUTH_WORK_HYDRATION_RESOLVED', JSON.stringify({ success: false, errorClass: error instanceof Error ? error.name : typeof error }));
+          }
         }
-      }
-      if (!cancelled && !online && await restoreOfflineContinuation()) { setRequiresOnlineFirstSignIn(false); return; }
-      if (!cancelled) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); setRequiresOnlineFirstSignIn(!online); setUatSessionState('SIGNED_OUT'); console.info('AUTH_INIT_SET_OPERATOR', JSON.stringify({ value: 'null' })); console.info('AUTH_INIT_SET_STATE', JSON.stringify({ state: 'SIGNED_OUT' })); }
-    })();
-    return () => { cancelled = true; console.info('AUTH_INIT_EFFECT_CLEANUP'); };
+        if (!cancelled && !online && await restoreOfflineContinuation()) { setRequiresOnlineFirstSignIn(false); return; }
+        finishSignedOut(online ? 'SESSION_OR_WORK_REJECTED' : 'OFFLINE_CONTINUATION_UNAVAILABLE', online);
+      })().catch((error) => {
+        console.info('AUTH_INIT_SYNC_FAILURE', JSON.stringify({ errorName: error instanceof Error ? error.name : typeof error }));
+        finishSignedOut('BOOTSTRAP_FAILURE', false);
+      });
+    } catch (error) {
+      console.info('AUTH_INIT_SYNC_FAILURE', JSON.stringify({ errorName: error instanceof Error ? error.name : typeof error }));
+      finishSignedOut('BOOTSTRAP_FAILURE', false);
+    }
+    return cleanup;
   }, []);
 
   useEffect(() => {
