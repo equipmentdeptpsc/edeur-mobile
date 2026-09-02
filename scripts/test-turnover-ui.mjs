@@ -8,6 +8,7 @@ const home = read('app/(tabs)/home.tsx');
 const commands = read('lib/canonical/commandRepository.ts');
 let passed = 0, failed = 0;
 const check = (value, label) => value ? (passed++, console.log(`  PASS: ${label}`)) : (failed++, console.error(`  FAIL: ${label}`));
+const resolveCustodyDisplayName = (operatorId, displayName, identity) => displayName?.trim() || (operatorId === identity.operatorId ? identity.operatorName : 'Unavailable');
 
 console.log('=== UAT Turnover UI Contract Tests ===');
 check(work.includes("read_eligible_deur_turnover_operators") && work.includes('turnoverTargets'), 'eligible relievers come from the canonical read projection');
@@ -23,5 +24,13 @@ check(panel.includes('ACCEPT TURNOVER') && panel.includes('turnoverStatus === \'
 check(home.includes('PENDING HANDOVER') && home.includes("turnoverStatus==='PENDING'"), 'pending handover is distinct from normal assignment work on Home');
 check(panel.includes('Activity controls remain locked') && panel.includes('This DEUR is read-only after custody transfers'), 'non-custodian cannot mutate activity, end shift, or submit');
 check(work.includes('turnoverId') && work.includes('currentAuthorizedOperatorId'), 'same DEUR identity and custody are preserved through projection');
+check(panel.includes('Primary operator: {primaryOperatorDisplayName}') && panel.includes('Current operator: {currentOperatorDisplayName}'), 'custody card renders display names instead of raw operator IDs');
+check(panel.includes("displayName?.trim() ||") && panel.includes("'Unavailable'"), 'missing counterpart names use a safe non-UUID fallback');
+check(work.includes('primaryOperatorDisplayName') && work.includes('currentAuthorizedOperatorDisplayName'), 'turnover mapper retains canonical primary and current display names');
+const primary={operatorId:'primary-id',operatorName:'Synthetic UAT Limited Pilot Operator 001'};
+const reliever={operatorId:'reliever-id',operatorName:'Synthetic UAT Limited Pilot Operator 002'};
+check(resolveCustodyDisplayName(primary.operatorId,primary.operatorName,reliever)===primary.operatorName,'primary display name remains immutable after custody moves to a reliever');
+check(resolveCustodyDisplayName(reliever.operatorId,reliever.operatorName,reliever)===reliever.operatorName,'current display name changes to the accepted reliever');
+check(resolveCustodyDisplayName(primary.operatorId,undefined,reliever)==='Unavailable','a missing counterpart name never falls back to a raw UUID label');
 console.log(`=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed) process.exitCode = 1;
