@@ -16,7 +16,9 @@ const expoEnvironment = (): Record<string, string | undefined> => ({
 });
 
 export function readCanonicalEnvironment(source: Record<string, string | undefined> = expoEnvironment()): CanonicalEnvironment {
-  const requestedMode = source.EXPO_PUBLIC_EDEUR_MODE?.trim() || 'DEMO';
+  // Fail closed when the mode injection is missing. Demo is opt-in only;
+  // an isolated-UAT build must never silently downgrade to demo credentials.
+  const requestedMode = source.EXPO_PUBLIC_EDEUR_MODE?.trim() || 'UAT';
   if (requestedMode !== 'DEMO' && requestedMode !== 'UAT') throw new Error('eDEUR mode must be explicitly DEMO or UAT.');
   const mode = requestedMode;
   if (mode === 'DEMO') return { mode };
