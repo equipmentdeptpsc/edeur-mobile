@@ -8,6 +8,15 @@ export interface CanonicalEnvironment {
   projectRef?: string;
 }
 
+export interface CanonicalEnvironmentDiagnostics {
+  environment: MobileRuntimeMode;
+  canonicalConfig: 'READY' | 'BLOCKED';
+  canonicalAuth: 'ENABLED' | 'DISABLED';
+  demoMode: 'ENABLED' | 'DISABLED';
+  demoFallback: 'DISABLED';
+  configSource: 'EXPO_PUBLIC_PROCESS_ENV';
+}
+
 const expoEnvironment = (): Record<string, string | undefined> => ({
   EXPO_PUBLIC_EDEUR_MODE: process.env.EXPO_PUBLIC_EDEUR_MODE,
   EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
@@ -33,4 +42,16 @@ export function readCanonicalEnvironment(source: Record<string, string | undefin
   const api = new URL(apiBaseUrl);
   if (api.protocol !== 'https:' || api.username || api.password) throw new Error('UAT API URL is invalid.');
   return { mode, supabaseUrl, supabaseAnonKey, apiBaseUrl: api.origin, projectRef };
+}
+
+export function canonicalEnvironmentDiagnostics(environment: CanonicalEnvironment, configurationError: string | null): CanonicalEnvironmentDiagnostics {
+  const canonicalReady = environment.mode === 'UAT' && configurationError === null;
+  return {
+    environment: environment.mode,
+    canonicalConfig: canonicalReady ? 'READY' : 'BLOCKED',
+    canonicalAuth: canonicalReady ? 'ENABLED' : 'DISABLED',
+    demoMode: environment.mode === 'DEMO' ? 'ENABLED' : 'DISABLED',
+    demoFallback: 'DISABLED',
+    configSource: 'EXPO_PUBLIC_PROCESS_ENV',
+  };
 }
