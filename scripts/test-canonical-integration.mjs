@@ -17,12 +17,16 @@ const contract=read('lib/canonical/contracts.generated.ts');
 const authContext=read('lib/auth.tsx');const loginScreen=read('app/login.tsx');
 const packageJson=read('package.json');
 const lifecycle=read('lib/canonical/deurLifecycle.ts');
+const runtime=read('lib/canonical/runtime.ts');
 const deurScreen=read('app/(tabs)/deur.tsx');const canonicalPanel=read('components/CanonicalDeurOperatorPanel.tsx');const homeScreen=read('app/(tabs)/home.tsx');
 
 console.log('=== Canonical Mobile Integration Contract Tests ===');
 check(environment.includes("mode === 'DEMO'")&&environment.includes('canonical configuration is incomplete'),'UAT configuration fails closed');
+check(runtime.includes('resolvedRuntimeMode()')&&environment.includes("=== 'DEMO' ? 'DEMO' : 'UAT'"),'configuration failure cannot silently select Demo mode');
 check(environment.includes("projectRef !== 'jtkctarqbwmqdcewthkn'"),'UAT project ref is pinned to isolated UAT');
-check(packageJson.includes('node --env-file=.env.uat ./node_modules/expo/bin/cli start'),'UAT startup explicitly loads the nonstandard .env.uat file');
+check(packageJson.includes('"dev:uat": "node ./node_modules/expo/bin/cli start --clear --lan"')&&read('app.config.js').includes('LOCAL_ENV_UAT_FILE'),'physical UAT startup uses app config to load .env.uat with a clean LAN bundle');
+check(read('app.config.js').includes('LOCAL_ENV_UAT_FILE')&&environment.includes('Constants.expoConfig?.extra')&&!environment.includes('process.env.EXPO_PUBLIC_'),'app configuration is the sole mobile runtime source instead of a Metro process environment read');
+check(environment.includes('canonicalEnvironmentDiagnostics')&&environment.includes("demoFallback: 'DISABLED'")&&runtime.includes('resolvedRuntimeMode()')&&runtime.includes("console.log('EDEUR_RUNTIME_CONFIGURATION'"),'runtime diagnostics are safe, reachable once, and Metro-visible');
 check(!auth.includes('mockRepository')&&auth.includes('signInWithPassword')&&auth.includes('/api/auth/username-login'),'canonical auth cannot use mock/PIN identities');
 check(auth.includes('AUTH_SERVICE_UNAVAILABLE')&&auth.includes('INVALID_CREDENTIALS')&&auth.includes('OPERATOR_LINKAGE')&&auth.includes('SESSION_INITIALIZATION'),'canonical auth classifies failures without exposing identities or tokens');
 check(loginScreen.includes("getLoginError() ?? 'Canonical sign-in failed.'")&&!loginScreen.includes('Verify credentials and UAT configuration'),'UAT login renders sanitized classified failures instead of the generic diagnostic dead end');

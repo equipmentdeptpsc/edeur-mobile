@@ -36,8 +36,11 @@ export class SupabaseOperatorWorkRepository implements OperatorWorkRepository {
       const dateResult=await this.client.schema('erp').rpc('read_uat_limited_pilot_operator_work_date',{line_id:work.rentalLine.id});
       const effectiveWorkDate=isRecord(dateResult.data)&&dateResult.data.success===true?text(dateResult.data,'effectiveWorkDate'):undefined;
       if(!isDate(effectiveWorkDate))continue;
-      if(work.dailyDeur?.workDate!==effectiveWorkDate)delete work.dailyDeur;
-      if(work.openDeur||work.dailyDeur)continue;
+      // The pilot clock is authoritative. Reconcile the daily projection from
+      // that server date on every hydration so a prior-day terminal DEUR can
+      // never remain selected from the device clock/cache.
+      if(work.openDeur)continue;
+      delete work.dailyDeur;
       const dailyResult=await this.client.schema('erp').from('deurs').select('id,deur_number,work_date,status,row_version,operator_id,shift').eq('rental_equipment_line_id',work.rentalLine.id).eq('work_date',effectiveWorkDate).is('previous_revision_id',null).order('created_at',{ascending:false}).limit(1).maybeSingle();
       if(dailyResult.error)throw new Error('Canonical pilot daily DEUR projection failed.');
       if(dailyResult.data)work.dailyDeur=this.mapOpenDeur(dailyResult.data as Row);
