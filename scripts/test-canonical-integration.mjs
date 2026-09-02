@@ -15,6 +15,7 @@ const offlineOutbox=read('lib/canonical/offlineOutbox.ts');
 const contract=read('lib/canonical/contracts.generated.ts');
 const authContext=read('lib/auth.tsx');const loginScreen=read('app/login.tsx');
 const packageJson=read('package.json');
+const lifecycle=read('lib/canonical/deurLifecycle.ts');
 const deurScreen=read('app/(tabs)/deur.tsx');const canonicalPanel=read('components/CanonicalDeurOperatorPanel.tsx');const homeScreen=read('app/(tabs)/home.tsx');
 
 console.log('=== Canonical Mobile Integration Contract Tests ===');
@@ -27,6 +28,7 @@ check(loginScreen.includes("getLoginError() ?? 'Canonical sign-in failed.'")&&!l
 check(auth.includes("from('users')")&&auth.includes("from('operators')")&&auth.includes("status !== 'active'"),'authenticated user and linked active Operator are required');
 check(authContext.includes("runtime.environment.mode === 'UAT'")&&authContext.includes('runtime.authentication.signIn')&&authContext.includes("runtime.environment.mode !== 'DEMO'"),'UAT app auth uses canonical session and disables PIN turnover paths');
 check(work.includes('read_current_operator_deur_turnover_work')&&work.includes('turnoverStatus')&&work.includes('currentAuthorizedOperatorId'),'reliever work is projected only through the canonical turnover RPC');
+check(lifecycle.includes("status === 'Submitted'")&&work.includes('isDeurOpenForOperatorMutation(status)')&&authContext.includes("failure('DEUR_READ_ONLY')"),'Submitted turnover work is never projected as mutable and commands fail closed');
 check(work.includes('primaryOperatorDisplayName')&&work.includes('currentAuthorizedOperatorDisplayName')&&canonicalPanel.includes('custodyDisplayName'),'turnover custody labels use canonical display names with a safe fallback');
 check(commands.includes('command_initiate_deur_turnover')&&commands.includes('command_accept_deur_turnover'),'turnover commands remain canonical RPC calls');
 check(offlineOutbox.includes('expo-file-system')&&offlineOutbox.includes("'ACTIVITY_TRANSITION' | 'COMPLETE_SHIFT'")&&offlineOutbox.includes('localSequence'),'offline outbox is durable and limited to pilot-safe commands');
@@ -36,7 +38,7 @@ check(authContext.includes('CONNECTIVITY_REQUIRED_FOR_SUBMIT')&&authContext.incl
 check(loginScreen.includes("mode === 'UAT'")&&loginScreen.includes('Username or email')&&loginScreen.includes('Demo PINs: 1234'),'login UI explicitly separates UAT credentials from demo PIN mode');
 check(selector.includes("environment.mode==='DEMO'")&&selector.includes('Demo fallback is disabled'),'DEMO selects mock and UAT has no silent fallback');
 check(work.includes("from('rental_equipment_lines')")&&work.includes('assignment_id')&&work.includes('rental_equipment_line_id'),'canonical Rental Line drives active work and open DEUR lookup');
-check(work.includes("const open=rows.find(row=>text(row,'status')==='Draft'||text(row,'status')==='In Progress')")&&work.includes(".eq('work_date',effectiveWorkDate)"),'prior-workday open DEUR lookup is unfiltered while the separate pilot daily lookup is server-date scoped');
+check(work.includes("const open=rows.find(row=>isDeurOpenForOperatorMutation(text(row,'status')??''))")&&work.includes(".eq('work_date',effectiveWorkDate)"),'prior-workday mutable DEUR lookup is lifecycle-scoped while the separate pilot daily lookup is server-date scoped');
 check(work.includes("from('deur_events')")&&work.includes(".eq('is_open',true)")&&work.includes('activeActivity'),'current activity is reconciled from the canonical event projection');
 check(work.includes('for(const work of works)')&&work.includes('Canonical active activity projection is ambiguous.'),'multi-work projection hydrates and fail-closes active activity state');
 check(deurScreen.includes('Redirect')&&deurScreen.includes('if (!operator) return <Redirect href="/login" />;'),'unauthenticated DEUR route fails closed to login instead of rendering blank');

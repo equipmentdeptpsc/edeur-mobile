@@ -18,7 +18,7 @@ check(auth.includes('TARGET_OPERATOR_NOT_ELIGIBLE'), 'arbitrary target operator 
 check(auth.includes('CONNECTIVITY_REQUIRED_FOR_TURNOVER') && auth.includes("connectivity === 'offline'"), 'turnover initiation is online-only');
 check(commands.includes('command_initiate_deur_turnover') && auth.includes('refreshCanonicalWork'), 'initiation uses the canonical command and refreshes state');
 check(panel.includes('TURN OVER DEUR') && panel.includes('turnoverTargets.map'), 'current custodian sees a target-specific turnover action');
-check(panel.includes('isOpen && hasCustodyAuthority') && panel.includes('work.turnoverTargets?.length'), 'initiation requires an open DEUR, current custody, and a non-empty server-derived target list');
+check(panel.includes('canMutateOperationalState') && panel.includes('work.turnoverTargets?.length'), 'initiation requires an open mutable DEUR, current custody, and a non-empty server-derived target list');
 check(panel.includes("offlineSyncState === 'OFFLINE'") && !panel.includes('offlineOutbox.enqueue'), 'offline turnover is blocked and never queued');
 check(panel.includes('ACCEPT TURNOVER') && panel.includes('turnoverStatus === \'PENDING\''), 'pending turnover exposes acceptance only to the nominated reliever');
 check(home.includes('PENDING HANDOVER') && home.includes("turnoverStatus==='PENDING'"), 'pending handover is distinct from normal assignment work on Home');
@@ -32,5 +32,11 @@ const reliever={operatorId:'reliever-id',operatorName:'Synthetic UAT Limited Pil
 check(resolveCustodyDisplayName(primary.operatorId,primary.operatorName,reliever)===primary.operatorName,'primary display name remains immutable after custody moves to a reliever');
 check(resolveCustodyDisplayName(reliever.operatorId,reliever.operatorName,reliever)===reliever.operatorName,'current display name changes to the accepted reliever');
 check(resolveCustodyDisplayName(primary.operatorId,undefined,reliever)==='Unavailable','a missing counterpart name never falls back to a raw UUID label');
+const canMutate=(status,isOpen,hasCustodyAuthority)=>!['Submitted'].includes(status)&&isOpen&&hasCustodyAuthority;
+check(canMutate('In Progress',true,true),'In Progress DEUR keeps operational controls available to the authorized operator');
+check(canMutate('In Progress',true,true),'End Shift remains available before Submit while the DEUR is In Progress');
+check(!canMutate('Submitted',true,true),'Submitted DEUR blocks activity, turnover, End Shift, and Submit even when a stale open projection exists');
+check(!canMutate('Submitted',true,false),'Submitted turnover DEUR remains read-only for the original primary operator');
+check(panel.includes('isReadOnly')&&panel.includes('canMutateOperationalState')&&auth.includes("failure('DEUR_READ_ONLY')"),'shared lifecycle guard blocks both rendered controls and direct mobile command handlers');
 console.log(`=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed) process.exitCode = 1;
