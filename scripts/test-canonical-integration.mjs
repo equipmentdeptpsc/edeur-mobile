@@ -4,6 +4,7 @@ let passed=0,failed=0;const check=(condition,label)=>{if(condition){passed++;con
 const read=(path)=>readFileSync(path,'utf8');
 const environment=read('lib/canonical/environment.ts');
 const client=read('lib/canonical/client.ts');
+const connectivity=read('lib/useConnectivity.ts');
 const authentication=read('lib/canonical/authentication.ts');
 const auth=read('lib/canonical/authentication.ts');
 const selector=read('lib/repositories/selectOperatorWorkRepository.ts');
@@ -43,7 +44,8 @@ check(work.includes("from('deur_events')")&&work.includes(".eq('is_open',true)")
 check(work.includes('for(const work of works)')&&work.includes('Canonical active activity projection is ambiguous.'),'multi-work projection hydrates and fail-closes active activity state');
 check(deurScreen.includes('Redirect')&&deurScreen.includes('if (!operator) return <Redirect href="/login" />;'),'unauthenticated DEUR route fails closed to login instead of rendering blank');
 check(client.includes('persistSession: true'),'UAT Supabase session persistence is enabled');
-check(authentication.includes('initialSession()')&&authentication.includes('INITIAL_SESSION')&&authentication.includes('restoreSession')&&authentication.includes('setTimeout(() => finish(null), 8000)'),'UAT Supabase session restoration resolves canonical identity and is bounded');
+check(connectivity.includes('new Promise<Response>')&&connectivity.includes('CONNECTIVITY_TIMEOUT')&&connectivity.includes('HEARTBEAT_TIMEOUT_MS'),'native connectivity probing settles even when fetch ignores abort');
+check(authentication.includes('initialSession()')&&authentication.includes('INITIAL_SESSION')&&authentication.includes('restoreSession')&&authentication.includes('AUTH_INITIAL_SESSION_TIMEOUT_FIRED'),'UAT Supabase session restoration resolves canonical identity and is bounded');
 check(authContext.includes("runtime.environment.mode === 'UAT' ? undefined")&&authContext.includes("'INITIALIZING'")&&authContext.includes('restoreOfflineContinuation')&&authContext.includes('applyCanonicalSession')&&authContext.includes('BOOTSTRAP_TIMEOUT'),'auth initialization defers routing until online authorization or bounded offline restoration resolves');
 const startBody=commands.slice(commands.indexOf(' start('),commands.indexOf(' transition('));
 check(startBody.includes("'command_start_deur_shift'")&&!startBody.includes('workDate')&&!startBody.includes('deurNumber'),'Start invokes canonical command without authoritative workDate/number');

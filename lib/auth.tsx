@@ -135,7 +135,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const withBootstrapTimeout = async <T,>(operation: Promise<T>, timeoutMs = 12000): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      return await Promise.race([operation, new Promise<T>((_, reject) => { timeoutId = setTimeout(() => reject(new Error('BOOTSTRAP_TIMEOUT')), timeoutMs); })]);
+      return await Promise.race([operation, new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          console.info('AUTH_WORK_HYDRATION_TIMEOUT_FIRED');
+          reject(new Error('BOOTSTRAP_TIMEOUT'));
+        }, timeoutMs);
+      })]);
     } finally { if (timeoutId) clearTimeout(timeoutId); }
   };
 
@@ -218,18 +223,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (runtime.environment.mode !== 'UAT' || !runtime.authentication) return;
     let cancelled = false;
     void (async () => {
+      console.info('AUTH_INIT_EFFECT_START');
       setUatSessionState('INITIALIZING');
       const online = await probeCanonicalConnectivity(connectivityProbeUrl);
       if (!cancelled && online) {
+        let session: Awaited<ReturnType<NonNullable<typeof runtime.authentication>['restoreSession']>> = null;
         try {
-          const session = await runtime.authentication!.restoreSession();
-          if (await withBootstrapTimeout(applyCanonicalSession(session))) { if (!cancelled) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); } return; }
-        } catch { /* A reachable service without a valid session is signed out, not offline continuation. */ }
+          console.info('AUTH_INITIAL_SESSION_CALL');
+          session = await runtime.authentication!.restoreSession();
+        } catch (error) {
+          console.info('AUTH_INITIAL_SESSION_REJECTED', JSON.stringify({ errorClass: error instanceof Error ? error.name : typeof error }));
+        }
+        try {
+          console.info('AUTH_WORK_HYDRATION_START');
+          const hydrated = await withBootstrapTimeout(applyCanonicalSession(session));
+          console.info('AUTH_WORK_HYDRATION_RESOLVED', JSON.stringify({ success: hydrated }));
+          if (hydrated) { if (!cancelled) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); console.info('AUTH_INIT_SET_OPERATOR', JSON.stringify({ value: 'object' })); console.info('AUTH_INIT_SET_STATE', JSON.stringify({ state: 'ONLINE_AUTHENTICATED' })); } return; }
+        } catch (error) {
+          console.info('AUTH_WORK_HYDRATION_RESOLVED', JSON.stringify({ success: false, errorClass: error instanceof Error ? error.name : typeof error }));
+        }
       }
       if (!cancelled && !online && await restoreOfflineContinuation()) { setRequiresOnlineFirstSignIn(false); return; }
-      if (!cancelled) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); setRequiresOnlineFirstSignIn(!online); setUatSessionState('SIGNED_OUT'); }
+      if (!cancelled) { setOperator(null); setCanonicalWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); setRequiresOnlineFirstSignIn(!online); setUatSessionState('SIGNED_OUT'); console.info('AUTH_INIT_SET_OPERATOR', JSON.stringify({ value: 'null' })); console.info('AUTH_INIT_SET_STATE', JSON.stringify({ state: 'SIGNED_OUT' })); }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; console.info('AUTH_INIT_EFFECT_CLEANUP'); };
   }, []);
 
   useEffect(() => {

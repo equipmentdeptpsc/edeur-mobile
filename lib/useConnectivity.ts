@@ -35,12 +35,13 @@ export async function probeCanonicalConnectivity(probeUrl?: string): Promise<boo
   console.info('CONNECTIVITY_PROBE_START', JSON.stringify({ target: new URL(target).pathname || '/' }));
   try {
     const controller = typeof AbortController === 'function' ? new AbortController() : undefined;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), HEARTBEAT_TIMEOUT_MS) : undefined;
-    try {
-      const response = await fetch(target, { method: 'GET', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) });
-      console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: true, httpStatus: response.status, classifiedOnline: true, failureClass: null }));
-    }
-    finally { if (timeoutId) clearTimeout(timeoutId); }
+    const response = await new Promise<Response>((resolve, reject) => {
+      let settled = false;
+      const finish = (action: () => void) => { if (settled) return; settled = true; clearTimeout(timeoutId); action(); };
+      const timeoutId = setTimeout(() => { controller?.abort(); finish(() => reject(Object.assign(new Error('CONNECTIVITY_TIMEOUT'), { name: 'AbortError' }))); }, HEARTBEAT_TIMEOUT_MS);
+      void fetch(target, { method: 'GET', cache: 'no-store', ...(controller ? { signal: controller.signal } : {}) }).then(value => finish(() => resolve(value))).catch(error => finish(() => reject(error)));
+    });
+    console.info('CONNECTIVITY_PROBE_RESULT', JSON.stringify({ transportReached: true, httpStatus: response.status, classifiedOnline: true, failureClass: null }));
     return true;
   } catch (error) {
     const failureClass: ConnectivityProbeFailureClass = isAbortLikeError(error) ? 'TIMEOUT' : 'NETWORK';

@@ -46,10 +46,13 @@ export class CanonicalAuthenticationRepository {
         settled = true;
         clearTimeout(timeoutId);
         unsubscribe?.();
+        console.info('AUTH_INITIAL_SESSION_RESOLVED', JSON.stringify({ sessionPresent: Boolean(session) }));
         resolve(session);
       };
-      timeoutId = setTimeout(() => finish(null), 8000);
+      console.info('AUTH_INITIAL_SESSION_TIMEOUT_ARMED');
+      timeoutId = setTimeout(() => { console.info('AUTH_INITIAL_SESSION_TIMEOUT_FIRED'); finish(null); }, 8000);
       const { data } = this.client.auth.onAuthStateChange((event, session) => {
+        console.info('AUTH_INITIAL_SESSION_EVENT_RECEIVED', JSON.stringify({ eventName: event }));
         if (event === 'INITIAL_SESSION') finish(session);
       });
       unsubscribe = () => data.subscription.unsubscribe();
