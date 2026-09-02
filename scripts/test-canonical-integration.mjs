@@ -17,10 +17,12 @@ const contract=read('lib/canonical/contracts.generated.ts');
 const authContext=read('lib/auth.tsx');const loginScreen=read('app/login.tsx');
 const packageJson=read('package.json');
 const lifecycle=read('lib/canonical/deurLifecycle.ts');
+const runtime=read('lib/canonical/runtime.ts');
 const deurScreen=read('app/(tabs)/deur.tsx');const canonicalPanel=read('components/CanonicalDeurOperatorPanel.tsx');const homeScreen=read('app/(tabs)/home.tsx');
 
 console.log('=== Canonical Mobile Integration Contract Tests ===');
 check(environment.includes("mode === 'DEMO'")&&environment.includes('canonical configuration is incomplete'),'UAT configuration fails closed');
+check(runtime.includes("process.env.EXPO_PUBLIC_EDEUR_MODE?.trim()==='DEMO'?'DEMO':'UAT'"),'configuration failure cannot silently select Demo mode');
 check(environment.includes("projectRef !== 'jtkctarqbwmqdcewthkn'"),'UAT project ref is pinned to isolated UAT');
 check(packageJson.includes('node --env-file=.env.uat ./node_modules/expo/bin/cli start'),'UAT startup explicitly loads the nonstandard .env.uat file');
 check(!auth.includes('mockRepository')&&auth.includes('signInWithPassword')&&auth.includes('/api/auth/username-login'),'canonical auth cannot use mock/PIN identities');
