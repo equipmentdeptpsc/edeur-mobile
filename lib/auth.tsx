@@ -417,6 +417,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const acceptCanonicalTurnover = async (): Promise<{ success: boolean; code?: string }> => {
     const turnoverId = canonicalWork?.custody?.turnoverId;
     if (!canonicalWork || canonicalWork.custody?.turnoverStatus !== 'PENDING' || !turnoverId || !runtime.commands) return failure('NO_PENDING_TURNOVER');
+    const deur = canonicalWork.openDeur ?? canonicalWork.dailyDeur;
+    if (deur && isDeurReadOnly(deur.status)) return failure('DEUR_READ_ONLY');
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_TURNOVER');
     if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
     canonicalBusyRef.current = true; setCanonicalBusy(true);

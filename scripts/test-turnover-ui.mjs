@@ -38,5 +38,7 @@ check(canMutate('In Progress',true,true),'End Shift remains available before Sub
 check(!canMutate('Submitted',true,true),'Submitted DEUR blocks activity, turnover, End Shift, and Submit even when a stale open projection exists');
 check(!canMutate('Submitted',true,false),'Submitted turnover DEUR remains read-only for the original primary operator');
 check(panel.includes('isReadOnly')&&panel.includes('canMutateOperationalState')&&auth.includes("failure('DEUR_READ_ONLY')"),'shared lifecycle guard blocks both rendered controls and direct mobile command handlers');
+const acceptTurnoverBody=auth.slice(auth.indexOf('const acceptCanonicalTurnover'),auth.indexOf('const selectCanonicalWork'));
+check(acceptTurnoverBody.includes("failure('DEUR_READ_ONLY')"),'a stale pending-turnover handler also fails closed after submission');
 console.log(`=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed) process.exitCode = 1;
