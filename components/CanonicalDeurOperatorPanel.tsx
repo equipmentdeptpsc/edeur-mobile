@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from './Button';
@@ -7,7 +7,7 @@ import { Card } from './Card';
 import { useAuth } from '@/lib/auth';
 import { useTheme } from '@/lib/useTheme';
 import { mapMobileActivity, type CanonicalMobileActivity } from '@/lib/canonical/activityMapping';
-import { isDeurReadOnly } from '@/lib/canonical/deurLifecycle';
+import { isDeurOpenForOperatorMutation, isDeurReadOnly } from '@/lib/canonical/deurLifecycle';
 import { spacing } from '@/lib/theme';
 
 const ACTIVITIES: CanonicalMobileActivity[] = ['Operating', 'Idle', 'Standby', 'Meal Break', 'Breakdown'];
@@ -21,6 +21,9 @@ export function CanonicalDeurOperatorPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [idleReason, setIdleReason] = useState<string | null>(null);
   const [showTurnoverTargets, setShowTurnoverTargets] = useState(false);
+  useEffect(() => {
+    if (offlineSyncState === 'ONLINE' && offlinePendingCount === 0 && message?.includes('queued locally')) setMessage(null);
+  }, [offlineSyncState, offlinePendingCount, message]);
   const act = async (label: string, action: () => Promise<{ success: boolean; code?: string }>) => {
     setMessage(null);
     const result = await action();
@@ -38,6 +41,7 @@ export function CanonicalDeurOperatorPanel() {
   const canAcceptTurnover = work.custody?.turnoverStatus === 'PENDING' && work.custody.turnoverToOperatorId === work.identity.operatorId;
   const hasCustodyAuthority = !work.custody || work.custody.currentAuthorizedOperatorId === work.identity.operatorId;
   const canMutateOperationalState = isOpen && !isReadOnly && hasCustodyAuthority;
+  const canMutateActivity = canMutateOperationalState && isDeurOpenForOperatorMutation(deur?.status ?? '');
   const primaryOperatorDisplayName = work.custody ? custodyDisplayName(work.custody.primaryOperatorId, work.custody.primaryOperatorDisplayName, work.identity) : null;
   const currentOperatorDisplayName = work.custody ? custodyDisplayName(work.custody.currentAuthorizedOperatorId, work.custody.currentAuthorizedOperatorDisplayName, work.identity) : null;
   return <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={[styles.content, { paddingTop: spacing.lg + insets.top, paddingBottom: spacing.xxxl + insets.bottom }]}>
@@ -49,11 +53,11 @@ export function CanonicalDeurOperatorPanel() {
       <Card style={styles.card}><Text style={[styles.name, { color: c.textPrimary }]}>{deur.deurNumber}</Text><Text style={{ color: c.textSecondary }}>Work date: {deur.workDate}</Text><Text style={{ color: c.textSecondary }}>Canonical status: {deur.status}</Text><Text style={{ color: c.textSecondary }}>Current activity: {deur.activeActivity ?? 'None'}</Text>{work.custody ? <><Text style={{ color: c.textSecondary }}>Primary operator: {primaryOperatorDisplayName}</Text><Text style={{ color: c.textSecondary }}>Current operator: {currentOperatorDisplayName}</Text>{work.custody.turnoverStatus === 'PENDING' ? <Text style={{ color: c.textMuted }}>Turnover is pending acceptance. Activity controls remain locked.</Text> : null}</> : null}</Card>
       {isOpen && !isReadOnly && work.custody?.turnoverStatus === 'PENDING' ? <><Text style={{ color: c.textMuted }}>{canAcceptTurnover ? 'Accepting a turnover is online-only and transfers authority without changing the DEUR primary operator.' : 'Turnover is pending reliever acceptance. Activity controls remain locked.'}</Text>{canAcceptTurnover ? <Button label="ACCEPT TURNOVER" disabled={canonicalBusy} loading={canonicalBusy} onPress={() => void act('Accept turnover', acceptCanonicalTurnover)} /> : null}</> : canMutateOperationalState ? <><Text style={[styles.section, { color: c.textPrimary }]}>Operational state</Text>
       {work.turnoverTargets?.length ? <><Button label="TURN OVER DEUR" variant="secondary" disabled={canonicalBusy || offlineSyncState === 'OFFLINE' || offlineReadOnly} onPress={() => setShowTurnoverTargets(value => !value)} /><Text style={{ color: c.textMuted }}>{offlineSyncState === 'OFFLINE' ? 'Turnover requires an online connection.' : 'Nominate an eligible reliever. Your custody and current activity remain unchanged until acceptance.'}</Text>{showTurnoverTargets ? <View style={styles.controls}>{work.turnoverTargets.map(target => <Button key={target.operatorId} label={`TURN OVER TO ${target.displayName.toUpperCase()}`} disabled={canonicalBusy || offlineSyncState === 'OFFLINE' || offlineReadOnly} loading={canonicalBusy} onPress={() => void act('Turnover', async () => { const result=await initiateCanonicalTurnover(target.operatorId); if(result.success)setShowTurnoverTargets(false); return result; })} style={styles.control} />)}</View> : null}</> : null}
-      <View style={styles.controls}>{ACTIVITIES.map((label) => { const activity=mapMobileActivity(label); return <Button key={label} label={label.toUpperCase()} variant="secondary" disabled={canonicalBusy || offlineReadOnly || deur.activeActivity === activity} onPress={() => void act(label, () => transitionCanonicalActivity(activity, label === 'Idle' && idleReason ? { id: idleReason, label: idleReason } : undefined))} style={styles.control} />; })}</View>
+      <View style={styles.controls}>{ACTIVITIES.map((label) => { const activity=mapMobileActivity(label); return <Button key={label} label={label.toUpperCase()} variant="secondary" disabled={canonicalBusy || !canMutateActivity || offlineReadOnly || deur.activeActivity === activity} onPress={() => void act(label, () => transitionCanonicalActivity(activity, label === 'Idle' && idleReason ? { id: idleReason, label: idleReason } : undefined))} style={styles.control} />; })}</View>
       <Text style={{ color: c.textMuted }}>Optional Idle reason (metadata only)</Text>
       <View style={styles.controls}>{IDLE_REASONS.map((reason) => <Button key={reason} label={reason} variant={idleReason === reason ? 'primary' : 'ghost'} disabled={canonicalBusy || offlineReadOnly} onPress={() => setIdleReason(reason)} style={styles.reason} />)}</View>
       <Text style={{ color: c.textMuted }}>Standby remains an explicit state. The current canonical command has no Standby-reason field, so Mobile does not fabricate one.</Text>
-      <Button label="END SHIFT" variant="danger" disabled={canonicalBusy || offlineReadOnly} onPress={() => void act('End Shift', endCanonicalShift)} />
+      <Button label="END SHIFT" variant="danger" disabled={canonicalBusy || !canMutateActivity || offlineReadOnly} onPress={() => void act('End Shift', endCanonicalShift)} />
       <Button label="SUBMIT DEUR" disabled={canonicalBusy || uatSessionState !== 'ONLINE_AUTHENTICATED'} loading={canonicalBusy} onPress={() => void act('Submit', submitCanonicalDeur)} /></> : <Text style={{ color: c.textMuted }}>{isReadOnly ? 'This DEUR is read-only after submission. Customer review continues through the canonical service.' : isOpen && !hasCustodyAuthority ? 'This DEUR is read-only after custody transfers. Customer review continues through the canonical service.' : 'This DEUR is read-only after submission. Customer review continues through the canonical service.'}</Text>}
     </>}
     {scenario8Replay.enabled ? <Card style={styles.card}><Text style={[styles.section, { color: c.textPrimary }]}>Scenario 8 UAT Test Harness</Text><Text style={{ color: c.textSecondary }}>End Shift original: {scenario8Replay.endShift.replace('_', ' ')}</Text><Button label="REPLAY EXACT END SHIFT" variant="secondary" disabled={canonicalBusy || scenario8Replay.endShift !== 'CAPTURED'} loading={canonicalBusy} onPress={() => void act('Exact End Shift replay', () => replayScenario8Terminal('END_SHIFT'))} /><Text style={{ color: c.textSecondary }}>Submit original: {scenario8Replay.submit.replace('_', ' ')}</Text><Button label="REPLAY EXACT SUBMIT" variant="secondary" disabled={canonicalBusy || scenario8Replay.submit !== 'CAPTURED'} loading={canonicalBusy} onPress={() => void act('Exact Submit replay', () => replayScenario8Terminal('SUBMIT'))} /><Text style={{ color: c.textMuted }}>Keys and payloads remain private. Each replay is available once only after canonical success.</Text></Card> : null}
