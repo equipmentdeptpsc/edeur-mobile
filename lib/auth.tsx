@@ -9,6 +9,7 @@ import type { OfflineSyncState } from './canonical/offlineOutbox';
 import type { OfflineContinuationSnapshot } from './canonical/offlineContinuation';
 import { createSecureCommandId } from './canonical/secureCommandId';
 import { isDeurReadOnly } from './canonical/deurLifecycle';
+import { Scenario8ReplayHarness, type Scenario8HarnessState, type Scenario8TerminalCommand } from './canonical/uatScenario8ReplayHarness';
 
 export type UatSessionState = 'INITIALIZING' | 'ONLINE_AUTHENTICATED' | 'OFFLINE_CONTINUATION' | 'OFFLINE_EXPIRED' | 'REAUTH_REQUIRED' | 'SIGNED_OUT';
 
@@ -37,6 +38,8 @@ interface AuthContextValue {
   transitionCanonicalActivity: (activity: CanonicalActivity, reason?: { id: string; label: string; remarks?: string }) => Promise<CanonicalCommandResult>;
   endCanonicalShift: (evidence?: { closingMeter?: number; closingLocation?: string }) => Promise<CanonicalCommandResult>;
   submitCanonicalDeur: () => Promise<CanonicalCommandResult>;
+  scenario8Replay: Scenario8HarnessState;
+  replayScenario8Terminal: (type: Scenario8TerminalCommand) => Promise<{ success: boolean; code?: string }>;
   initiateCanonicalTurnover: (targetOperatorId: string) => Promise<{ success: boolean; code?: string }>;
   acceptCanonicalTurnover: () => Promise<{ success: boolean; code?: string }>;
   logout: () => void;
@@ -128,6 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginErrorRef = useRef<string | null>(null);
   const canonicalBusyRef = useRef(false);
   const commandIds = useRef(new Map<string, string>());
+  const scenario8HarnessRef = useRef(new Scenario8ReplayHarness());
+  const [, setScenario8ReplayRevision] = useState(0);
   const replayingOffline = useRef(false);
   const revalidatingSession = useRef(false);
   const turnoverHydrationRef = useRef(0);
@@ -432,14 +437,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await refreshOfflineStatus(); return failure('LOCAL_PENDING');
     }
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure(uatSessionState === 'OFFLINE_EXPIRED' ? 'OFFLINE_CONTINUATION_EXPIRED' : 'CONNECTIVITY_REQUIRED_FOR_REVALIDATION');
-    return runCanonical('end-shift', (identity) => runtime.commands!.endShift(canonicalWork, deur.id, deur.rowVersion, identity, evidence));
+    const result = await runCanonical('end-shift', (identity) => {
+      const prepared = runtime.commands!.prepareEndShift(canonicalWork, deur.id, deur.rowVersion, identity, evidence);
+      const captured = scenario8HarnessRef.current.capture('END_SHIFT', runtime.environment, canonicalWork, prepared.payload);
+      return runtime.commands!.executeTerminal(prepared).then(value => { if (captured && !value.success) scenario8HarnessRef.current.discard('END_SHIFT'); return value; });
+    });
+    setScenario8ReplayRevision(value => value + 1);
+    return result;
   };
   const submitCanonicalDeur = async () => {
     const deur = canonicalWork?.openDeur;
     if (!canonicalWork || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
     if (isDeurReadOnly(deur.status)) return failure('DEUR_READ_ONLY');
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_SUBMIT');
-    return runCanonical('submit', (identity) => runtime.commands!.submit(canonicalWork, deur.id, deur.rowVersion, identity));
+    const result = await runCanonical('submit', (identity) => {
+      const prepared = runtime.commands!.prepareSubmit(canonicalWork, deur.id, deur.rowVersion, identity);
+      const captured = scenario8HarnessRef.current.capture('SUBMIT', runtime.environment, canonicalWork, prepared.payload);
+      return runtime.commands!.executeTerminal(prepared).then(value => { if (captured && !value.success) scenario8HarnessRef.current.discard('SUBMIT'); return value; });
+    });
+    setScenario8ReplayRevision(value => value + 1);
+    return result;
+  };
+  const replayScenario8Terminal: AuthContextValue['replayScenario8Terminal'] = async (type) => {
+    if (!canonicalWork || !runtime.commands || canonicalBusyRef.current) return failure('SCENARIO8_REPLAY_BLOCKED');
+    canonicalBusyRef.current = true; setCanonicalBusy(true);
+    try {
+      const result = await scenario8HarnessRef.current.replay(type, runtime.environment, canonicalWork, async payload => runtime.commands!.executeTerminal({ name: type === 'END_SHIFT' ? 'command_complete_deur_shift' : 'command_submit_deur', payload }));
+      if (result.success) await refreshCanonicalWork();
+      return result;
+    } finally { canonicalBusyRef.current = false; setCanonicalBusy(false); setScenario8ReplayRevision(value => value + 1); }
   };
   const initiateCanonicalTurnover = async (targetOperatorId: string): Promise<{ success: boolean; code?: string }> => {
     const deur = canonicalWork?.openDeur;
@@ -474,7 +500,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const selectCanonicalWork = (rentalEquipmentLineId:string) => { const work=canonicalWorks.find(item=>item.rentalLine.id===rentalEquipmentLineId) ?? null; setSelectedCanonicalWork(work); setCanonicalWork(work); setPendingDeurId(work?.openDeur?.id ?? null); };
   return (
-    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, requiresOnlineFirstSignIn, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, requiresOnlineFirstSignIn, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, scenario8Replay: scenario8HarnessRef.current.state(runtime.environment, canonicalWork), replayScenario8Terminal, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
       {children}
     </AuthContext.Provider>
   );

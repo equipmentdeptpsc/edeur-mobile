@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const harness = readFileSync(new URL('../lib/canonical/uatScenario8ReplayHarness.ts', import.meta.url), 'utf8');
+const repository = readFileSync(new URL('../lib/canonical/commandRepository.ts', import.meta.url), 'utf8');
+const auth = readFileSync(new URL('../lib/auth.tsx', import.meta.url), 'utf8');
+const panel = readFileSync(new URL('../components/CanonicalDeurOperatorPanel.tsx', import.meta.url), 'utf8');
+
+for (const value of ['jtkctarqbwmqdcewthkn', '42120275-248a-453a-8c7f-1c471221a0d3', '7577e0c0-ce2e-4fc6-9e1b-358729f03e73', '9c8e8c25-bd59-4cb4-9ef7-62edbe15d413', '2026-09-03']) assert.match(harness, new RegExp(value));
+assert.match(harness, /environment\.mode === FIXED\.mode && environment\.projectRef === FIXED\.projectRef/, 'isolated UAT project gate is mandatory');
+assert.match(harness, /payload\.deurId !== deur\.id[\s\S]*payload\.operatorId !== work\.identity\.operatorId[\s\S]*payload\.rentalLineId !== work\.rentalLine\.id[\s\S]*payload\.assignmentId !== work\.assignment\.id/, 'capture cannot change target lineage');
+assert.match(harness, /authUserId !== work\.identity\.authUserId/, 'session/operator change blocks replay');
+assert.match(harness, /targetDeurId !== deur\.id/, 'a different DEUR cannot be replayed');
+assert.match(harness, /record\.used = true/, 'replay is one shot even if transport fails');
+assert.match(harness, /copy\(record\.payload\)/, 'replay receives an immutable copy of the captured request');
+assert.match(repository, /prepareEndShift[\s\S]*command_complete_deur_shift/);
+assert.match(repository, /prepareSubmit[\s\S]*command_submit_deur/);
+assert.match(repository, /executeTerminal\(command:PreparedTerminalCommand\)/, 'same repository and authenticated client execute the exact prepared request');
+assert.match(auth, /capture\('END_SHIFT', runtime\.environment, canonicalWork, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'End Shift is captured immediately before normal send');
+assert.match(auth, /capture\('SUBMIT', runtime\.environment, canonicalWork, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'Submit is captured immediately before normal send');
+assert.match(auth, /scenario8HarnessRef\.current\.replay[\s\S]*executeTerminal/, 'replay remains in the existing authenticated canonical client');
+assert.match(panel, /Scenario 8 UAT Test Harness/);
+assert.match(panel, /scenario8Replay\.enabled/, 'control is invisible unless every fixed gate passes');
+assert.match(panel, /scenario8Replay\.endShift !== 'CAPTURED'/);
+assert.match(panel, /scenario8Replay\.submit !== 'CAPTURED'/);
+assert.doesNotMatch(harness, /AsyncStorage|localStorage|FileSystem|console\./, 'raw requests are neither persisted nor logged');
+console.log('PASS Scenario 8 fixed UAT idempotency harness: exact capture, same-client replay, one-shot, session isolation, and production exclusion');
