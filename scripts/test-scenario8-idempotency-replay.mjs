@@ -5,6 +5,7 @@ const harness = readFileSync(new URL('../lib/canonical/uatScenario8ReplayHarness
 const repository = readFileSync(new URL('../lib/canonical/commandRepository.ts', import.meta.url), 'utf8');
 const auth = readFileSync(new URL('../lib/auth.tsx', import.meta.url), 'utf8');
 const panel = readFileSync(new URL('../components/CanonicalDeurOperatorPanel.tsx', import.meta.url), 'utf8');
+const lifecycle = readFileSync(new URL('../lib/canonical/deurLifecycle.ts', import.meta.url), 'utf8');
 
 for (const value of ['jtkctarqbwmqdcewthkn', '42120275-248a-453a-8c7f-1c471221a0d3', '7577e0c0-ce2e-4fc6-9e1b-358729f03e73', '9c8e8c25-bd59-4cb4-9ef7-62edbe15d413', '2026-09-03']) assert.match(harness, new RegExp(value));
 assert.match(harness, /environment\.mode === FIXED\.mode && environment\.projectRef === FIXED\.projectRef/, 'isolated UAT project gate is mandatory');
@@ -23,5 +24,8 @@ assert.match(panel, /Scenario 8 UAT Test Harness/);
 assert.match(panel, /scenario8Replay\.enabled/, 'control is invisible unless every fixed gate passes');
 assert.match(panel, /scenario8Replay\.endShift !== 'CAPTURED'/);
 assert.match(panel, /scenario8Replay\.submit !== 'CAPTURED'/);
+assert.match(panel, /!canMutateActivity/, 'activity and End Shift controls are disabled after End Shift');
+assert.ok(panel.indexOf("{scenario8Replay.enabled ?") > panel.indexOf("</Card>") , 'harness is mounted outside the normal DEUR controls branch');
+assert.match(lifecycle, /isDeurOpenForOperatorMutation/);
 assert.doesNotMatch(harness, /AsyncStorage|localStorage|FileSystem|console\./, 'raw requests are neither persisted nor logged');
 console.log('PASS Scenario 8 fixed UAT idempotency harness: exact capture, same-client replay, one-shot, session isolation, and production exclusion');
