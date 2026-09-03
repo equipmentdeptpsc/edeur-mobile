@@ -15,7 +15,7 @@ const IDLE_REASONS = ['material', 'trucks', 'instructions', 'customer', 'access'
 const custodyDisplayName = (operatorId: string, displayName: string | undefined, identity: { operatorId: string; operatorName: string }) => displayName?.trim() || (operatorId === identity.operatorId ? identity.operatorName : 'Unavailable');
 
 export function CanonicalDeurOperatorPanel() {
-  const { canonicalWork: work, canonicalWorks, selectCanonicalWork, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, initiateCanonicalTurnover, acceptCanonicalTurnover } = useAuth();
+  const { canonicalWork: work, canonicalWorks, selectCanonicalWork, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, scenario8Replay, replayScenario8Terminal, initiateCanonicalTurnover, acceptCanonicalTurnover } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [message, setMessage] = useState<string | null>(null);
@@ -56,6 +56,7 @@ export function CanonicalDeurOperatorPanel() {
       <Button label="END SHIFT" variant="danger" disabled={canonicalBusy || offlineReadOnly} onPress={() => void act('End Shift', endCanonicalShift)} />
       <Button label="SUBMIT DEUR" disabled={canonicalBusy || uatSessionState !== 'ONLINE_AUTHENTICATED'} loading={canonicalBusy} onPress={() => void act('Submit', submitCanonicalDeur)} /></> : <Text style={{ color: c.textMuted }}>{isReadOnly ? 'This DEUR is read-only after submission. Customer review continues through the canonical service.' : isOpen && !hasCustodyAuthority ? 'This DEUR is read-only after custody transfers. Customer review continues through the canonical service.' : 'This DEUR is read-only after submission. Customer review continues through the canonical service.'}</Text>}
     </>}
+    {scenario8Replay.enabled ? <Card style={styles.card}><Text style={[styles.section, { color: c.textPrimary }]}>Scenario 8 UAT Test Harness</Text><Text style={{ color: c.textSecondary }}>End Shift original: {scenario8Replay.endShift.replace('_', ' ')}</Text><Button label="REPLAY EXACT END SHIFT" variant="secondary" disabled={canonicalBusy || scenario8Replay.endShift !== 'CAPTURED'} loading={canonicalBusy} onPress={() => void act('Exact End Shift replay', () => replayScenario8Terminal('END_SHIFT'))} /><Text style={{ color: c.textSecondary }}>Submit original: {scenario8Replay.submit.replace('_', ' ')}</Text><Button label="REPLAY EXACT SUBMIT" variant="secondary" disabled={canonicalBusy || scenario8Replay.submit !== 'CAPTURED'} loading={canonicalBusy} onPress={() => void act('Exact Submit replay', () => replayScenario8Terminal('SUBMIT'))} /><Text style={{ color: c.textMuted }}>Keys and payloads remain private. Each replay is available once only after canonical success.</Text></Card> : null}
     {message ? <Text style={{ color: c.textSecondary }}>{message}</Text> : null}
     <Text style={{ color: c.textMuted }}>Customer review and billing continue in the trusted Web/backend workflow after submission.</Text>
   </ScrollView>;
