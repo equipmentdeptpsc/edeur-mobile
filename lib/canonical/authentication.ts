@@ -7,7 +7,7 @@ export interface CanonicalAuthenticationResult {
   identity: CanonicalSessionIdentity;
 }
 
-export type CanonicalAuthenticationFailureCode = 'INVALID_CREDENTIALS' | 'AUTH_SERVICE_UNAVAILABLE' | 'OPERATOR_LINKAGE' | 'SESSION_INITIALIZATION' | 'CONFIGURATION';
+export type CanonicalAuthenticationFailureCode = 'INVALID_CREDENTIALS' | 'AUTH_SERVICE_UNAVAILABLE' | 'ACCOUNT_UNAVAILABLE' | 'RATE_LIMITED' | 'SESSION_INITIALIZATION' | 'CONFIGURATION';
 
 export class CanonicalAuthenticationError extends Error {
   constructor(readonly code:CanonicalAuthenticationFailureCode,message:string){super(message);this.name='CanonicalAuthenticationError';}
@@ -22,6 +22,14 @@ export class CanonicalAuthenticationRepository {
     const session = identifier.includes('@')
       ? await this.emailSession(identifier, password)
       : await this.usernameSession(identifier, password);
+    const identity = await this.resolveIdentity(session.user.id);
+    return { session, identity };
+  }
+
+  async signInWithOperatorPin(identifierInput: string, pin: string): Promise<CanonicalAuthenticationResult> {
+    const identifier = identifierInput.trim();
+    if (!identifier || !isValidOperatorPin(pin)) throw new CanonicalAuthenticationError('INVALID_CREDENTIALS','Invalid login name or PIN.');
+    const session = await this.operatorPinSession(identifier, pin);
     const identity = await this.resolveIdentity(session.user.id);
     return { session, identity };
   }
@@ -67,15 +75,24 @@ export class CanonicalAuthenticationRepository {
   }
 
   private async usernameSession(identifier: string, password: string): Promise<Session> {
+    return this.workerSession('/api/auth/username-login', { identifier, password }, 'Invalid username or password.');
+  }
+
+  private async operatorPinSession(identifier: string, pin: string): Promise<Session> {
+    return this.workerSession('/api/auth/operator-pin-login', { identifier, pin }, 'Invalid login name or PIN.');
+  }
+
+  private async workerSession(path: '/api/auth/username-login' | '/api/auth/operator-pin-login', payload: Record<string, string>, invalidMessage: string): Promise<Session> {
     if (!this.environment.apiBaseUrl) throw new CanonicalAuthenticationError('CONFIGURATION','UAT configuration is unavailable.');
     let response:Response;
-    try{response=await fetch(`${this.environment.apiBaseUrl}/api/auth/username-login`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier,password})});}
+    try{response=await fetch(`${this.environment.apiBaseUrl}${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});}
     catch{throw new CanonicalAuthenticationError('AUTH_SERVICE_UNAVAILABLE','Unable to reach UAT authentication service.');}
-    const payload = await response.json().catch(() => null) as { success?: boolean; session?: { accessToken?: unknown; refreshToken?: unknown } } | null;
-    if (!response.ok || payload?.success !== true || typeof payload.session?.accessToken !== 'string' || typeof payload.session.refreshToken !== 'string') {
-      throw new CanonicalAuthenticationError('INVALID_CREDENTIALS','Invalid username or password.');
+    const responsePayload = await response.json().catch(() => null) as { success?: boolean; session?: { accessToken?: unknown; refreshToken?: unknown } } | null;
+    if (response.status === 429) throw new CanonicalAuthenticationError('RATE_LIMITED','Too many attempts. Try again later.');
+    if (!response.ok || responsePayload?.success !== true || typeof responsePayload.session?.accessToken !== 'string' || typeof responsePayload.session.refreshToken !== 'string') {
+      throw new CanonicalAuthenticationError('INVALID_CREDENTIALS',invalidMessage);
     }
-    const installed = await this.client.auth.setSession({ access_token: payload.session.accessToken, refresh_token: payload.session.refreshToken });
+    const installed = await this.client.auth.setSession({ access_token: responsePayload.session.accessToken, refresh_token: responsePayload.session.refreshToken });
     if (installed.error || !installed.data.session) throw new CanonicalAuthenticationError('SESSION_INITIALIZATION','Unable to initialize the authenticated session.');
     return installed.data.session;
   }
@@ -85,14 +102,22 @@ export class CanonicalAuthenticationRepository {
     const user = userResponse.data as { id?: unknown; company_id?: unknown; operator_id?: unknown; status?: unknown } | null;
     if (userResponse.error || typeof user?.id !== 'string' || user.status !== 'active' || typeof user.company_id !== 'string' || typeof user.operator_id !== 'string') {
       await this.client.auth.signOut();
-      throw new CanonicalAuthenticationError('OPERATOR_LINKAGE','Your account is not linked to an active Operator.');
+      throw new CanonicalAuthenticationError('ACCOUNT_UNAVAILABLE','Account unavailable.');
     }
     const operatorResponse = await this.client.schema('erp').from('operators').select('id,name,status').eq('id', user.operator_id).maybeSingle();
     const operator = operatorResponse.data as { id?: unknown; name?: unknown; status?: unknown } | null;
     if (operatorResponse.error || typeof operator?.id !== 'string' || typeof operator.name !== 'string' || operator.status !== 'Active') {
       await this.client.auth.signOut();
-      throw new CanonicalAuthenticationError('OPERATOR_LINKAGE','Your account is not linked to an active Operator.');
+      throw new CanonicalAuthenticationError('ACCOUNT_UNAVAILABLE','Account unavailable.');
     }
     return { authUserId, applicationUserId: user.id, companyId: user.company_id, operatorId: operator.id, operatorName: operator.name };
   }
+}
+
+export function isValidOperatorPin(pin:string):boolean{
+  if(!/^\d{6}$/.test(pin))return false;
+  const digits=[...pin].map(value=>value.charCodeAt(0));
+  if(digits.every(value=>value===digits[0]))return false;
+  const delta=digits[1]-digits[0];
+  return !((delta===1||delta===-1)&&digits.every((value,index)=>index===0||value-digits[index-1]===delta));
 }

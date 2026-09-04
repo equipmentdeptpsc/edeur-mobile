@@ -11,7 +11,8 @@ assert.match(repository, /openDeur=selected\.open/);
 assert.match(repository, /dailyDeur=selected\.daily/);
 assert.match(panel, /work\.openDeur \?\? work\.dailyDeur/, 'submitted daily DEUR remains visible');
 assert.match(panel, /const isOpen = Boolean\(work\.openDeur\)/);
-assert.match(panel, /isOpen \? <></, 'activity, End Shift, and Submit controls require an open DEUR');
+assert.match(panel, /const canMutateOperationalState = isOpen && !isReadOnly && hasCustodyAuthority/, 'activity, End Shift, and Submit controls require an open mutable DEUR with custody authority');
+assert.match(panel, /canMutateOperationalState \? <></, 'activity, End Shift, and Submit controls render only for mutable work');
 assert.match(auth, /canonicalWork\.dailyDeur/, 'same-day Start guard includes submitted daily DEUR');
 assert.match(auth, /DAILY_DEUR_EXISTS/);
 

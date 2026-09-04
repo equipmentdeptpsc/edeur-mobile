@@ -15,7 +15,8 @@
     "test:session-hydration": "node scripts/test-session-hydration.mjs",
     "test:keep-awake": "node scripts/test-keep-awake.mjs",
     "test:routing-bootstrap": "node scripts/test-routing-bootstrap.mjs",
-    "test:scenario8-idempotency": "node scripts/test-scenario8-idempotency-replay.mjs"
+    "test:scenario8-idempotency": "node scripts/test-scenario8-idempotency-replay.mjs",
+    "test:operator-pin-login": "node scripts/test-operator-pin-login.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "^0.4.2",

@@ -15,9 +15,9 @@ const check = (condition, label) => {
   else { failed += 1; console.error(`FAIL: ${label}`); }
 };
 
-check(login.includes("mode === 'UAT'") && login.includes('Username or email') && login.includes('secureTextEntry'), 'UAT renders canonical credential form');
+check(login.includes("mode === 'UAT'") && login.includes('Login Name') && login.includes('Canonical Operator Access'), 'UAT renders canonical Operator PIN form');
 check(!login.includes('Demo PINs: 1234') || login.includes("mode === 'DEMO' ?"), 'demo credential hints are isolated to DEMO mode');
-check(auth.includes('signInWithPassword') && auth.includes('/api/auth/username-login'), 'canonical auth uses existing email/username contracts');
+check(auth.includes('signInWithOperatorPin') && auth.includes('/api/auth/operator-pin-login') && auth.includes('/api/auth/username-login'), 'canonical auth uses explicit PIN and password compatibility contracts');
 check(auth.includes("from('users')") && auth.includes("from('operators')") && auth.includes("status !== 'active'") && auth.includes("status !== 'Active'"), 'authenticated user and active operator linkage are required');
 check(environment.includes("projectRef !== 'jtkctarqbwmqdcewthkn'") && environment.includes('Demo fallback is disabled'), 'UAT is pinned to isolated canonical environment');
 check(packageJson.includes('"web:uat": "node --env-file=.env.uat') && packageJson.includes('--clear --web'), 'UAT web launch explicitly loads .env.uat');
