@@ -29,7 +29,7 @@ interface AuthContextValue {
   offlineContinuationSnapshot: OfflineContinuationSnapshot | null;
   requiresOnlineFirstSignIn: boolean;
   getLoginError: () => string | null;
-  login: (identifier: string, password?: string) => Promise<boolean>;
+  login: (identifier: string, credential?: string, method?: 'OPERATOR_PIN' | 'PASSWORD') => Promise<boolean>;
   loginReliever: (name: string, pin: string, deurId?: string) => boolean;
   loginMainOperator: (pin: string, deurId: string) => boolean;
   resumeDeur: (deurId: string) => boolean;
@@ -292,12 +292,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, [connectivity, uatSessionState]);
 
-  const login = async (identifier: string, password?: string) => {
+  const login = async (identifier: string, credential?: string, method: 'OPERATOR_PIN' | 'PASSWORD' = 'PASSWORD') => {
     loginErrorRef.current=null;
     if (runtime.environment.mode === 'UAT') {
-      if (runtime.configurationError || !runtime.authentication || !runtime.workRepository || !password) return false;
+      if (runtime.configurationError || !runtime.authentication || !runtime.workRepository || !credential) return false;
       try {
-        const authenticated = await runtime.authentication.signIn(identifier, password);
+        const authenticated = method === 'OPERATOR_PIN'
+          ? await runtime.authentication.signInWithOperatorPin(identifier, credential)
+          : await runtime.authentication.signIn(identifier, credential);
         const applied = await applyCanonicalSession(authenticated);
         if (applied) { setRequiresOnlineFirstSignIn(false); setUatSessionState('ONLINE_AUTHENTICATED'); }
         return applied;
