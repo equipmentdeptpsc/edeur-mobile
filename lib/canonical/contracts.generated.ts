@@ -4,6 +4,7 @@
 
 export type MobileRuntimeMode = 'DEMO' | 'UAT';
 export type CanonicalActivity = 'operation' | 'idle' | 'standby' | 'mealBreak' | 'breakdown';
+export type CanonicalMeterRequirement = 'none' | 'hourMeter' | 'odometer' | 'both';
 
 export interface CanonicalSessionIdentity {
   authUserId: string;
@@ -26,6 +27,7 @@ export interface CanonicalOpenDeur {
   totalIdleMinutes?: number;
   totalMaintenanceMinutes?: number;
   totalMealBreakMinutes?: number;
+  totalStandbyMinutes?: number;
   openingMeter?: number;
   closingMeter?: number;
   operationalRemarks?: string;
@@ -33,6 +35,8 @@ export interface CanonicalOpenDeur {
   acknowledgedAt?: string;
   acknowledgementStatus?: string;
   events?: CanonicalDeurEvent[];
+  startedAt?: string;
+  endedAt?: string;
 }
 
 export interface CanonicalDeurEvent {
@@ -55,6 +59,7 @@ export interface CanonicalOperatorWork {
   equipment: { id: string; name: string; assetNumber: string; currentReading?: number };
   rental: { id: string; rentalNumber: string; status: string; billingMethod?: string };
   rentalLine: { id: string; status: string; operationalMetadata: Record<string, unknown> };
+  meterRequirement?: CanonicalMeterRequirement;
   custody?: { primaryOperatorId: string; primaryOperatorDisplayName?: string; currentAuthorizedOperatorId: string; currentAuthorizedOperatorDisplayName?: string; turnoverId?: string; turnoverToOperatorId?: string; turnoverStatus: 'PENDING' | 'ACCEPTED' };
   openDeur?: CanonicalOpenDeur;
   dailyDeur?: CanonicalOpenDeur;
