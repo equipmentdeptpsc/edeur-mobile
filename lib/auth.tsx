@@ -404,7 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally { canonicalBusyRef.current = false; setCanonicalBusy(false); }
   };
   const startCanonicalDeur: AuthContextValue['startCanonicalDeur'] = async (optional = {}) => {
-    if (!canonicalWork || canonicalWork.openDeur || canonicalWork.dailyDeur || !runtime.commands) return failure(canonicalWork?.openDeur ? 'PRIOR_OPEN_DEUR' : canonicalWork?.dailyDeur ? 'DAILY_DEUR_EXISTS' : 'NO_AUTHORIZED_WORK');
+    if (!canonicalWork || canonicalWork.openDeur || !runtime.commands) return failure(canonicalWork?.openDeur ? 'PRIOR_OPEN_DEUR' : canonicalWork?.dailyDeur ? 'DAILY_DEUR_EXISTS' : 'NO_AUTHORIZED_WORK');
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_START');
     const draftKey = 'start-draft';
     let draftId = commandIds.current.get(draftKey);

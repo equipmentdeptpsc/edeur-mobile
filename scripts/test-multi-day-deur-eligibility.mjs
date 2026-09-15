@@ -14,9 +14,10 @@ let failed=0;
 for(const [passed,label] of checks){console.log(`${passed?'PASS':'FAIL'}: ${label}`);if(!passed)failed++;}
 const resolveDaily=({open,daily,serverDate,byDate})=>{
   let selected=daily;
+  if(selected && !['Draft','In Progress'].includes(selected.status))selected=undefined;
   if(selected?.workDate!==serverDate)selected=undefined;
   if(open||selected)return selected;
-  return byDate.find(item=>item.workDate===serverDate);
+  return byDate.find(item=>item.workDate===serverDate&&['Draft','In Progress'].includes(item.status));
 };
 const submitted={workDate:'2026-09-01',status:'Submitted'};
 const sameDaySubmitted={workDate:'2026-09-02',status:'Submitted'};
@@ -24,9 +25,9 @@ const priorOpen={workDate:'2026-09-01',status:'In Progress'};
 const mergeTurnoverWork=(assignmentWork,turnoverWork)=>turnoverWork.status==='Draft'||turnoverWork.status==='In Progress'?{...assignmentWork,openDeur:turnoverWork,dailyDeur:turnoverWork}:assignmentWork;
 const cases=[
   [resolveDaily({daily:submitted,serverDate:'2026-09-02',byDate:[submitted]})===undefined,'previous-day submitted is historical and Start remains eligible'],
-  [resolveDaily({daily:sameDaySubmitted,serverDate:'2026-09-02',byDate:[sameDaySubmitted]})===sameDaySubmitted,'same-day submitted suppresses duplicate Start'],
+  [resolveDaily({daily:sameDaySubmitted,serverDate:'2026-09-02',byDate:[sameDaySubmitted]})===undefined,'same-day submitted remains historical and Start remains eligible'],
   [resolveDaily({open:priorOpen,serverDate:'2026-09-02',byDate:[]})===undefined,'prior-day open remains outside daily selection while canonical openDeur blocks Start'],
-  [resolveDaily({daily:submitted,serverDate:'2026-09-02',byDate:[sameDaySubmitted]})===sameDaySubmitted,'server date wins when device-derived daily selection is stale'],
+  [resolveDaily({daily:submitted,serverDate:'2026-09-02',byDate:[sameDaySubmitted]})===undefined,'server date wins while submitted history remains non-blocking'],
   [submitted.status==='Submitted'&&submitted.workDate==='2026-09-01','historical submitted DEUR is preserved for history'],
   [mergeTurnoverWork({dailyDeur:undefined},{...submitted,turnoverStatus:'ACCEPTED'}).dailyDeur===undefined,'submitted accepted turnover history cannot mask next-day eligible work'],
   [mergeTurnoverWork({dailyDeur:undefined},{...priorOpen,turnoverStatus:'ACCEPTED'}).openDeur?.status==='In Progress','genuinely open accepted turnover remains current work'],

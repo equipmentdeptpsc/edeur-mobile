@@ -22,6 +22,31 @@ export interface CanonicalOpenDeur {
   operatorId: string;
   shift?: string;
   activeActivity?: CanonicalActivity;
+  totalOperatingMinutes?: number;
+  totalIdleMinutes?: number;
+  totalMaintenanceMinutes?: number;
+  totalMealBreakMinutes?: number;
+  openingMeter?: number;
+  closingMeter?: number;
+  operationalRemarks?: string;
+  submittedAt?: string;
+  acknowledgedAt?: string;
+  acknowledgementStatus?: string;
+  events?: CanonicalDeurEvent[];
+}
+
+export interface CanonicalDeurEvent {
+  id: string;
+  activity: CanonicalActivity | 'shift';
+  action: 'start' | 'end';
+  occurredAt: string;
+  sequence: number;
+}
+
+export interface CanonicalDeurHistoryRecord extends CanonicalOpenDeur {
+  equipmentName: string;
+  assetNumber: string;
+  rentalNumber: string;
 }
 
 export interface CanonicalOperatorWork {

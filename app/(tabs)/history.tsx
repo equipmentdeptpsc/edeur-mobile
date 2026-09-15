@@ -6,6 +6,7 @@ import { Search, ChevronRight } from 'lucide-react-native';
 import { fonts, radius, spacing } from '@/lib/theme';
 import { useTheme } from '@/lib/useTheme';
 import { useAuth } from '@/lib/auth';
+import { CanonicalHistory } from '@/components/CanonicalHistory';
 import { mockRepository } from '@/lib/mockRepository';
 import { Card } from '@/components/Card';
 import { StatusChip } from '@/components/StatusChip';
@@ -15,7 +16,7 @@ import { TouchableOpacity } from 'react-native';
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const { operator } = useAuth();
+  const { operator, mode, canonicalWork } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
@@ -27,6 +28,7 @@ export default function HistoryScreen() {
   }, []);
 
   if (!operator) return null;
+  if (mode === 'UAT') return canonicalWork ? <CanonicalHistory identity={canonicalWork.identity} /> : <EmptyState title="DEUR History" message="Your submitted reports will appear here." />;
 
   const allHistory = mockRepository.getDeurHistory(operator.id);
   const filtered = search.trim()

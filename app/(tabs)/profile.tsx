@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LogOut, Truck, MapPin, FileText, Info, Sun, Moon } from 'lucide-react-native';
 import { useTheme } from '@/lib/useTheme';
 import { useAuth } from '@/lib/auth';
-import { mockRepository, resetUatData } from '@/lib/mockRepository';
+import { CanonicalProfile } from '@/components/CanonicalProfile';
 import { Card } from '@/components/Card';
 import { StatusChip } from '@/components/StatusChip';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -13,22 +13,21 @@ import { spacing, radius, fonts } from '@/lib/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { operator, logout } = useAuth();
+  const { operator, logout, mode: runtimeMode, canonicalWork } = useAuth();
   const { mode, toggle, colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [showLogout, setShowLogout] = useState(false);
-  const [showReset, setShowReset] = useState(false);
 
   if (!operator) return null;
+  if (runtimeMode === 'UAT' && canonicalWork) return <CanonicalProfile work={canonicalWork} />;
 
-  const activeDeur = mockRepository.getActiveDeurForOperator(operator.id);
-  const assignment = mockRepository.getOperatorAssignment(operator.id) ?? (activeDeur ? mockRepository.getAssignmentForDeur(activeDeur.id) : null);
-  const equipment = assignment ? mockRepository.getEquipment(assignment.equipmentId) : null;
-  const project = assignment ? mockRepository.getProject(assignment.projectId) : null;
-  const rental = mockRepository.getRentalForOperator(operator.id) ?? (activeDeur ? mockRepository.getRentalForDeur(activeDeur.id) : null);
+  const activeDeur = null;
+  const assignment: any = null;
+  const equipment: any = null;
+  const project: any = null;
+  const rental: any = null;
 
   const handleLogout = () => { logout(); router.replace('/login'); };
-  const handleResetUat = () => { resetUatData(); logout(); router.replace('/login'); };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.background }]} contentContainerStyle={[styles.content, { paddingTop: 12 + insets.top, paddingBottom: 92 + insets.bottom }]}>
@@ -116,12 +115,7 @@ export default function ProfileScreen() {
         <Text style={[styles.logoutText, { color: c.red500 }]}>Logout</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.resetButton, { borderColor: c.red500 }]} onPress={() => setShowReset(true)} activeOpacity={0.7}>
-        <Text style={[styles.resetText, { color: c.red500 }]}>Clear UAT Data (Dev)</Text>
-      </TouchableOpacity>
-
       <ConfirmDialog visible={showLogout} title="Logout?" message="You will be returned to the login screen. Any unsaved DEUR data will remain in the app." confirmLabel="Logout" onConfirm={handleLogout} onCancel={() => setShowLogout(false)} danger />
-      <ConfirmDialog visible={showReset} title="Clear All UAT Data?" message="This will permanently delete all DEUR records, operator sessions, and reliever data. The app will restart at the login screen with a clean state." confirmLabel="Clear All Data" onConfirm={handleResetUat} onCancel={() => setShowReset(false)} danger />
     </ScrollView>
   );
 }
