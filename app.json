@@ -3,6 +3,10 @@
     "name": "bolt-expo-nativewind",
     "slug": "bolt-expo-nativewind",
     "version": "1.0.0",
+    "android": {
+      "package": "com.pscequipment.edeur",
+      "versionCode": 1
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "splash": {
