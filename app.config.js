@@ -15,17 +15,21 @@ function readUatEnvironment() {
 }
 
 const uat = readUatEnvironment();
+const value = (key) => process.env[key] || uat[key];
+const source = process.env.EXPO_PUBLIC_EDEUR_MODE || process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_ERMS_API_URL
+  ? 'PROCESS_ENV'
+  : 'LOCAL_ENV_UAT_FILE';
 
 module.exports = () => ({
   ...baseConfig,
   extra: {
     ...(baseConfig.extra ?? {}),
     canonicalUat: {
-      mode: uat.EXPO_PUBLIC_EDEUR_MODE || 'UAT',
-      supabaseUrl: uat.EXPO_PUBLIC_SUPABASE_URL,
-      supabaseAnonKey: uat.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      apiBaseUrl: uat.EXPO_PUBLIC_ERMS_API_URL,
-      source: 'LOCAL_ENV_UAT_FILE',
+      mode: value('EXPO_PUBLIC_EDEUR_MODE') || 'UAT',
+      supabaseUrl: value('EXPO_PUBLIC_SUPABASE_URL'),
+      supabaseAnonKey: value('EXPO_PUBLIC_SUPABASE_ANON_KEY'),
+      apiBaseUrl: value('EXPO_PUBLIC_ERMS_API_URL'),
+      source,
     },
   },
 });
