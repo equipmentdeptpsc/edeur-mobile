@@ -20,7 +20,7 @@ assert.match(repository, /executeTerminal\(command:PreparedTerminalCommand\)/, '
 assert.match(auth, /capture\('END_SHIFT', runtime\.environment, canonicalWork, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'End Shift is captured immediately before normal send');
 assert.match(auth, /capture\('SUBMIT', runtime\.environment, canonicalWork, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'Submit is captured immediately before normal send');
 assert.match(auth, /scenario8HarnessRef\.current\.replay[\s\S]*executeTerminal/, 'replay remains in the existing authenticated canonical client');
-assert.match(panel, /Scenario 8 UAT Test Harness/);
+assert.match(panel, /Test Tools/);
 assert.match(panel, /scenario8Replay\.enabled/, 'control is invisible unless every fixed gate passes');
 assert.match(panel, /scenario8Replay\.endShift !== 'CAPTURED'/);
 assert.match(panel, /scenario8Replay\.submit !== 'CAPTURED'/);

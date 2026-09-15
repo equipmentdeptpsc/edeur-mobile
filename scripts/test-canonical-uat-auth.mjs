@@ -15,7 +15,7 @@ const check = (condition, label) => {
   else { failed += 1; console.error(`FAIL: ${label}`); }
 };
 
-check(login.includes("mode === 'UAT'") && login.includes('Login Name') && login.includes('Canonical Operator Access'), 'UAT renders canonical Operator PIN form');
+check(login.includes("mode === 'UAT'") && login.includes('Login Name') && login.includes('Operator Login') && !login.includes('Canonical Operator Access'), 'UAT renders operator-friendly PIN form');
 check(!login.includes('Demo PINs: 1234') || login.includes("mode === 'DEMO' ?"), 'demo credential hints are isolated to DEMO mode');
 check(auth.includes('signInWithOperatorPin') && auth.includes('/api/auth/operator-pin-login') && auth.includes('/api/auth/username-login'), 'canonical auth uses explicit PIN and password compatibility contracts');
 check(auth.includes("from('users')") && auth.includes("from('operators')") && auth.includes("status !== 'active'") && auth.includes("status !== 'Active'"), 'authenticated user and active operator linkage are required');
