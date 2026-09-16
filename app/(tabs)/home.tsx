@@ -223,7 +223,7 @@ export default function HomeScreen() {
 function CanonicalHome({operatorName,work,colors:c,insets}:{operatorName:string;work:import('@/lib/canonical/contracts.generated').CanonicalOperatorWork|null;colors:ReturnType<typeof useTheme>['colors'];insets:{top:number;bottom:number}}){
  return <ScrollView style={[styles.container,{backgroundColor:c.background}]} contentContainerStyle={[styles.content,{paddingTop:spacing.lg+insets.top,paddingBottom:spacing.xxxl+insets.bottom}]}>
   <View style={styles.header}><View><Text style={[styles.greeting,{color:c.textMuted}]}>Current Assignment</Text><Text style={[styles.operatorName,{color:c.textPrimary}]}>{operatorName}</Text></View><View style={[styles.syncBadge,{backgroundColor:c.emerald50}]}><Wifi size={14} color={c.emerald500}/><Text style={[styles.syncText,{color:c.emerald500}]}>Online</Text></View></View>
-  {work?<><Text style={[styles.sectionLabel,{color:c.textMuted}]}>{work.custody?.turnoverStatus==='PENDING'?'PENDING HANDOVER':'CURRENT WORK'}</Text><Card style={styles.assignmentCard}><Text style={[styles.equipmentName,{color:c.textPrimary}]}>{work.equipment.name}</Text><Text style={[styles.assetNumber,{color:c.textMuted}]}>{work.equipment.assetNumber}</Text><Text style={[styles.detailText,{color:c.textSecondary}]}>{work.rental.rentalNumber}</Text>{work.custody?.turnoverStatus==='PENDING'?<Text style={[styles.detailText,{color:c.amber500}]}>Turnover pending acceptance</Text>:<Text style={[styles.detailText,{color:c.textSecondary}]}>Assignment: {work.assignment.status}</Text>}</Card>{work.openDeur?<View style={[styles.deurNumberBanner,{backgroundColor:c.blue600}]}><Text style={[styles.deurNumberLabel,{color:c.blue50}]}>{work.custody?.turnoverStatus==='PENDING'?'PENDING HANDOVER · ':'OPEN DEUR · '}{work.openDeur.workDate}</Text><Text style={[styles.deurNumberValue,{color:c.white}]}>{work.openDeur.deurNumber}</Text></View>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No open DEUR.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Open the Digital DEUR tab to start work.</Text></Card>}</>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No current assignment found.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Contact your supervisor to get assigned to equipment.</Text></Card>}
+  {work?<><Text style={[styles.sectionLabel,{color:c.textMuted}]}>{work.custody?.turnoverStatus==='PENDING'?'PENDING HANDOVER':'CURRENT WORK'}</Text><Card style={styles.assignmentCard}><Text style={[styles.equipmentName,{color:c.textPrimary}]}>{work.equipment.name}</Text><Text style={[styles.assetNumber,{color:c.textMuted}]}>{work.equipment.assetNumber}</Text><Text style={[styles.detailText,{color:c.textSecondary}]}>{work.rental.rentalNumber}</Text>{work.custody?.turnoverStatus==='PENDING'?<Text style={[styles.detailText,{color:c.amber500}]}>Turnover pending acceptance</Text>:<Text style={[styles.detailText,{color:c.textSecondary}]}>Assignment: {work.assignment.status}</Text>}</Card>{work.openDeur?<Card style={{...styles.openDeurCard,borderColor:c.blue600}}><View style={styles.openDeurHeader}><View style={{flex:1}}><Text style={[styles.openDeurEyebrow,{color:c.blue600}]}>{work.custody?.turnoverStatus==='PENDING'?'PENDING HANDOVER':'OPEN DEUR'}</Text><Text style={[styles.openDeurNumber,{color:c.textPrimary}]}>{work.openDeur.deurNumber}</Text></View><StatusChip label={work.openDeur.status.toUpperCase()} variant="blue" /></View><Text style={[styles.openDeurMeta,{color:c.textSecondary}]}>Work date · {work.openDeur.workDate}</Text><Text style={[styles.openDeurMeta,{color:c.textMuted}]}>Tap DEUR to continue this shift</Text></Card>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No open DEUR.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Open the Digital DEUR tab to start work.</Text></Card>}</>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No current assignment found.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Contact your supervisor to get assigned to equipment.</Text></Card>}
  </ScrollView>;
 }
 
@@ -286,6 +286,29 @@ const styles = StyleSheet.create({
   deurNumberValue: {
     fontFamily: fonts.extrabold,
     fontSize: 18,
+  },
+  openDeurCard: {
+    gap: spacing.sm,
+    borderWidth: 1.5,
+  },
+  openDeurHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  openDeurEyebrow: {
+    fontFamily: fonts.extrabold,
+    fontSize: 11,
+    letterSpacing: 0.8,
+  },
+  openDeurNumber: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    marginTop: 2,
+  },
+  openDeurMeta: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
   },
   turnoverBanner: {
     borderRadius: radius.md,
