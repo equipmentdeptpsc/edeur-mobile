@@ -16,7 +16,7 @@ export interface OfflineDeurCommand {
   localSequence: number;
   expectedVersion: number;
   work: CanonicalOperatorWork;
-  payload: { activity?: CanonicalActivity; idleReason?: { id: string; label: string; remarks?: string }; evidence?: { closingMeter?: number; closingLocation?: string } };
+  payload: { activity?: CanonicalActivity; idleReason?: { id: string; label: string; remarks?: string }; evidence?: { closingHourMeter?: number; closingOdometer?: number; closingLocation?: string } };
   syncStatus: 'LOCAL_PENDING' | 'SERVER_CONFIRMED' | 'SYNC_CONFLICT' | 'REJECTED_AUTHORIZATION' | 'TERMINAL_STATE';
   retryCount: number;
   lastErrorCode?: string;
@@ -68,7 +68,14 @@ export class OfflineDeurCommandOutbox {
     const items = await this.list();
     for (const item of items.filter(entry => entry.syncStatus === 'LOCAL_PENDING').sort((left, right) => left.localSequence - right.localSequence)) {
       const result = await execute(item);
-      if (result.success) { item.syncStatus = 'SERVER_CONFIRMED'; item.lastErrorCode = undefined; await this.store.write(items); continue; }
+      if (result.success) {
+        // A canonically accepted envelope has no further work to do. Remove it
+        // from durable storage so a restart cannot resurrect a false pending
+        // indicator or replay the same idempotency key again.
+        item.syncStatus = 'SERVER_CONFIRMED'; item.lastErrorCode = undefined;
+        await this.store.write(items.filter(entry => entry !== item));
+        continue;
+      }
       item.retryCount += 1; item.lastErrorCode = result.code;
       if (result.code === 'TRANSPORT_FAILURE') { await this.store.write(items); return 'SYNC_PENDING'; }
       if (result.code === 'CONFLICT') { item.syncStatus = 'SYNC_CONFLICT'; await this.store.write(items); return 'SYNC_CONFLICT'; }

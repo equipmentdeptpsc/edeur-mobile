@@ -35,7 +35,6 @@ function meterRequirementLabel(requirement: CanonicalOperatorWork['meterRequirem
 
 export function CanonicalDeurDetailsSheet({ work, deur, colors: c, primaryOperatorDisplayName, currentOperatorDisplayName, onClose }: Props) {
   const duration = durationMinutes(deur);
-  const opening = deur.openingMeter ?? work.equipment.currentReading;
   const turnoverStatus = work.custody?.turnoverStatus === 'PENDING' ? 'Pending acceptance' : work.custody?.turnoverStatus === 'ACCEPTED' ? 'Accepted' : 'No active turnover';
   return <Modal visible animationType="slide" transparent onRequestClose={onClose}>
     <View style={styles.modalRoot}>
@@ -72,9 +71,9 @@ export function CanonicalDeurDetailsSheet({ work, deur, colors: c, primaryOperat
           </Section>
           <Section title="Meter" colors={c}>
             <DetailRow label="Meter type" value={meterRequirementLabel(work.meterRequirement)} colors={c} />
-            <DetailRow label="Opening reading" value={opening === undefined ? 'Not available' : String(opening)} colors={c} />
-            <DetailRow label="Current / closing reading" value={deur.closingMeter === undefined ? 'Not recorded' : String(deur.closingMeter)} colors={c} />
-            {work.meterRequirement === 'both' ? <Text style={[styles.warning, { color: c.amber500, backgroundColor: c.amber50 }]}>This equipment requires both hour-meter and odometer readings. Completion is not yet supported in this beta.</Text> : null}
+            {work.meterRequirement === 'hourMeter' || work.meterRequirement === 'both' ? <><DetailRow label="Opening hour meter" value={deur.openingHourMeter === undefined ? 'Not recorded' : String(deur.openingHourMeter)} colors={c} /><DetailRow label="Closing hour meter" value={deur.closingHourMeter === undefined ? 'Not recorded' : String(deur.closingHourMeter)} colors={c} /></> : null}
+            {work.meterRequirement === 'odometer' || work.meterRequirement === 'both' ? <><DetailRow label="Opening odometer" value={deur.openingOdometer === undefined ? 'Not recorded' : String(deur.openingOdometer)} colors={c} /><DetailRow label="Closing odometer" value={deur.closingOdometer === undefined ? 'Not recorded' : String(deur.closingOdometer)} colors={c} /></> : null}
+            {deur.legacyMeterEvidenceState === 'AMBIGUOUS_GENERIC_DUAL_METER' ? <Text style={[styles.warning, { color: c.amber500, backgroundColor: c.amber50 }]}>Historical record: generic meter evidence cannot be reliably assigned to hour meter versus odometer.</Text> : null}
           </Section>
           <Section title="Remarks" colors={c}><Text style={{ color: c.textSecondary }}>{deur.operationalRemarks?.trim() || 'No remarks recorded.'}</Text></Section>
           <Section title="Activity timeline" colors={c}>

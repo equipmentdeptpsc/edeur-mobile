@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { mockRepository } from './mockRepository';
 import type { Operator } from './types';
-import type { CanonicalActivity, CanonicalCommandResult, CanonicalOperatorWork } from './canonical/contracts.generated';
+import type { CanonicalActivity, CanonicalCommandResult, CanonicalMeterEvidence, CanonicalOperatorWork } from './canonical/contracts.generated';
 import { mobileRuntime as runtime } from './canonical/runtime';
 import { CanonicalAuthenticationError } from './canonical/authentication';
 import { canonicalConnectivityProbeUrl, probeCanonicalConnectivity, useConnectivity } from './useConnectivity';
@@ -34,9 +34,9 @@ interface AuthContextValue {
   loginMainOperator: (pin: string, deurId: string) => boolean;
   resumeDeur: (deurId: string) => boolean;
   refreshCanonicalWork: () => Promise<boolean>;
-  startCanonicalDeur: (optional?: { openingMeter?: number; shift?: string; operationalRemarks?: string }) => Promise<CanonicalCommandResult>;
+  startCanonicalDeur: (optional?: CanonicalMeterEvidence & { shift?: string; operationalRemarks?: string }) => Promise<CanonicalCommandResult>;
   transitionCanonicalActivity: (activity: CanonicalActivity, reason?: { id: string; label: string; remarks?: string }) => Promise<CanonicalCommandResult>;
-  endCanonicalShift: (evidence?: { closingMeter?: number; closingLocation?: string }) => Promise<CanonicalCommandResult>;
+  endCanonicalShift: (evidence?: Pick<CanonicalMeterEvidence, 'closingHourMeter' | 'closingOdometer'> & { closingLocation?: string }) => Promise<CanonicalCommandResult>;
   submitCanonicalDeur: () => Promise<CanonicalCommandResult>;
   scenario8Replay: Scenario8HarnessState;
   replayScenario8Terminal: (type: Scenario8TerminalCommand) => Promise<{ success: boolean; code?: string }>;

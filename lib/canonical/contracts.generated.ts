@@ -30,6 +30,12 @@ export interface CanonicalOpenDeur {
   totalStandbyMinutes?: number;
   openingMeter?: number;
   closingMeter?: number;
+  meterRequirement?: CanonicalMeterRequirement;
+  openingHourMeter?: number;
+  closingHourMeter?: number;
+  openingOdometer?: number;
+  closingOdometer?: number;
+  legacyMeterEvidenceState?: string;
   operationalRemarks?: string;
   submittedAt?: string;
   acknowledgedAt?: string;
@@ -37,6 +43,13 @@ export interface CanonicalOpenDeur {
   events?: CanonicalDeurEvent[];
   startedAt?: string;
   endedAt?: string;
+}
+
+export interface CanonicalMeterEvidence {
+  openingHourMeter?: number;
+  closingHourMeter?: number;
+  openingOdometer?: number;
+  closingOdometer?: number;
 }
 
 export interface CanonicalDeurEvent {
