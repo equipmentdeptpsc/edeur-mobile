@@ -4,6 +4,7 @@ const read = path => readFileSync(path, 'utf8');
 const auth = read('lib/auth.tsx');
 const work = read('lib/repositories/SupabaseOperatorWorkRepository.ts');
 const panel = read('components/CanonicalDeurOperatorPanel.tsx');
+const details = read('components/CanonicalDeurDetailsSheet.tsx');
 const home = read('app/(tabs)/home.tsx');
 const commands = read('lib/canonical/commandRepository.ts');
 let passed = 0, failed = 0;
@@ -24,7 +25,7 @@ check(panel.includes('ACCEPT TURNOVER') && panel.includes('turnoverStatus === \'
 check(home.includes('PENDING HANDOVER') && home.includes("turnoverStatus==='PENDING'"), 'pending handover is distinct from normal assignment work on Home');
 check(panel.includes('Activity controls remain locked') && panel.includes('This DEUR is read-only after custody transfers'), 'non-custodian cannot mutate activity, end shift, or submit');
 check(work.includes('turnoverId') && work.includes('currentAuthorizedOperatorId'), 'same DEUR identity and custody are preserved through projection');
-check(panel.includes('Primary operator: {primaryOperatorDisplayName}') && panel.includes('Current operator: {currentOperatorDisplayName}'), 'custody card renders display names instead of raw operator IDs');
+check(details.includes('label="Primary operator"') && details.includes('value={primaryOperatorDisplayName}') && details.includes('label="Current operator"') && details.includes('value={currentOperatorDisplayName}'), 'custody card renders display names instead of raw operator IDs');
 check(panel.includes("displayName?.trim() ||") && panel.includes("'Unavailable'"), 'missing counterpart names use a safe non-UUID fallback');
 check(work.includes('primaryOperatorDisplayName') && work.includes('currentAuthorizedOperatorDisplayName'), 'turnover mapper retains canonical primary and current display names');
 const primary={operatorId:'primary-id',operatorName:'Synthetic UAT Limited Pilot Operator 001'};

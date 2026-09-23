@@ -98,9 +98,9 @@ function DetailRow({ label, value, colors: c }: { label: string; value: string; 
 }
 
 const styles = StyleSheet.create({
-  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  modalRoot: { flex: 1, justifyContent: 'flex-end', alignItems: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject },
-  sheet: { maxHeight: '92%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, borderWidth: 1, overflow: 'hidden' },
+  sheet: { width: '92%', maxWidth: 440, height: '100%', maxHeight: '100%', borderTopLeftRadius: radius.xl, borderBottomLeftRadius: radius.xl, borderWidth: 1, overflow: 'hidden' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: '#94a3b833' },
   sheetTitle: { fontFamily: 'Manrope-ExtraBold', fontSize: 20 },
   closeButton: { minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
