@@ -15,17 +15,22 @@ function readUatEnvironment() {
 }
 
 const uat = readUatEnvironment();
+// EAS/CI values take precedence when supplied; local development can use an
+// ignored .env.uat without committing any client configuration.
+const uatValue = (key) => process.env[key] || uat[key];
+const uatSource = ['EXPO_PUBLIC_EDEUR_MODE', 'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_ANON_KEY', 'EXPO_PUBLIC_ERMS_API_URL']
+  .some((key) => process.env[key]) ? 'EAS_OR_PROCESS_ENV' : fs.existsSync(UAT_ENV_FILE) ? 'LOCAL_ENV_UAT_FILE' : 'UNCONFIGURED';
 
 module.exports = () => ({
   ...baseConfig,
   extra: {
     ...(baseConfig.extra ?? {}),
     canonicalUat: {
-      mode: uat.EXPO_PUBLIC_EDEUR_MODE || 'UAT',
-      supabaseUrl: uat.EXPO_PUBLIC_SUPABASE_URL,
-      supabaseAnonKey: uat.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      apiBaseUrl: uat.EXPO_PUBLIC_ERMS_API_URL,
-      source: 'LOCAL_ENV_UAT_FILE',
+      mode: uatValue('EXPO_PUBLIC_EDEUR_MODE') || 'UAT',
+      supabaseUrl: uatValue('EXPO_PUBLIC_SUPABASE_URL'),
+      supabaseAnonKey: uatValue('EXPO_PUBLIC_SUPABASE_ANON_KEY'),
+      apiBaseUrl: uatValue('EXPO_PUBLIC_ERMS_API_URL'),
+      source: uatSource,
     },
   },
 });

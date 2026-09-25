@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "eDEUR",
+    "slug": "edeur",
+    "owner": "psc-ed",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -13,6 +14,11 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "efd2d3a1-c3b4-405d-b571-78a605f3f575"
+      }
+    },
     "ios": {
       "supportsTablet": true
     },
