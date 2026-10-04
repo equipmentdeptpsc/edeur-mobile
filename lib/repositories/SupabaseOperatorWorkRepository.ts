@@ -34,6 +34,25 @@ export class SupabaseOperatorWorkRepository implements OperatorWorkRepository {
     await this.applyPilotDailyWorkDates([work]);
     return work;
   }
+  async getDeurEligibleWorks(identity:CanonicalSessionIdentity):Promise<CanonicalOperatorWork[]>{
+    const result=await this.client.schema('erp').rpc('read_pending_operator_return_day_deur_work');
+    if(result.error)throw new Error('Return-day DEUR eligibility projection failed.');
+    if(!isRecord(result.data)||result.data.success!==true)return[];
+    const rows=Array.isArray(result.data.work)?result.data.work:[];const works:CanonicalOperatorWork[]=[];
+    for(const value of rows){
+      if(!isRecord(value)||!isRecord(value.assignment)||!isRecord(value.equipment)||!isRecord(value.rental)||!isRecord(value.rentalLine)||!isRecord(value.deurEligibility))continue;
+      const assignment=value.assignment,equipment=value.equipment,rental=value.rental,line=value.rentalLine,eligibility=value.deurEligibility;
+      const assignmentId=text(assignment,'id'),projectId=text(assignment,'projectId'),equipmentId=text(equipment,'id'),equipmentName=text(equipment,'name'),assetNumber=text(equipment,'assetNumber'),rentalId=text(rental,'id'),rentalNumber=text(rental,'rentalNumber'),lineId=text(line,'id'),workDate=text(eligibility,'workDate'),state=text(eligibility,'state');
+      if(!assignmentId||!projectId||!equipmentId||!equipmentName||!assetNumber||!rentalId||!rentalNumber||!lineId||!isDate(workDate)||(state!=='PENDING'&&state!=='IN_PROGRESS'))continue;
+      const metadata=isRecord(line.operationalMetadata)?line.operationalMetadata:{};const expectation=isRecord(metadata.deurExpectationSnapshot)?metadata.deurExpectationSnapshot:{};
+      const deurs=await this.client.schema('erp').from('deurs').select('id,deur_number,work_date,status,row_version,operator_id,shift,created_at').eq('rental_equipment_line_id',lineId).eq('work_date',workDate).is('previous_revision_id',null).order('created_at',{ascending:false}).limit(2);
+      if(deurs.error)throw new Error('Return-day DEUR record projection failed.');
+      const selected=selectCanonicalDeurs((deurs.data??[]) as Row[],readExpectationTimezone(expectation));let openDeur=selected.open?this.mapOpenDeur(selected.open):undefined;let dailyDeur=selected.daily?this.mapOpenDeur(selected.daily):undefined;
+      if(openDeur)openDeur=await this.attachDeurDetails(openDeur);if(dailyDeur&&dailyDeur.id!==openDeur?.id)dailyDeur=await this.attachDeurDetails(dailyDeur);
+      const meter=readMeterRequirement(expectation);works.push({identity,assignment:{id:assignmentId,projectId,status:text(assignment,'status')??'Completed'},equipment:{id:equipmentId,name:equipmentName,assetNumber,...(numeric(equipment,'currentReading')!==undefined?{currentReading:numeric(equipment,'currentReading')}:{})},rental:{id:rentalId,rentalNumber,status:text(rental,'status')??'Active',...(typeof expectation.billingMethod==='string'?{billingMethod:expectation.billingMethod}:{})},rentalLine:{id:lineId,status:text(line,'status')??'Returned',operationalMetadata:metadata},deurEligibility:{kind:'PENDING_RETURN_DAY',workDate,state},...(meter?{meterRequirement:meter}:{}),...(openDeur?{openDeur}:{}),...(dailyDeur?{dailyDeur}:{})});
+    }
+    return works;
+  }
   async loadTurnoverTargets(work:CanonicalOperatorWork):Promise<void>{await this.attachTurnoverTargets(work);}
   private async applyPilotDailyWorkDates(works:CanonicalOperatorWork[]):Promise<void>{
     for(const work of works){
