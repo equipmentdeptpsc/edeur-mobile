@@ -16,7 +16,7 @@ import { TouchableOpacity } from 'react-native';
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const { operator, mode, canonicalWork } = useAuth();
+  const { operator, mode, canonicalIdentity } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
@@ -28,7 +28,7 @@ export default function HistoryScreen() {
   }, []);
 
   if (!operator) return null;
-  if (mode === 'UAT') return canonicalWork ? <CanonicalHistory identity={canonicalWork.identity} /> : <EmptyState title="DEUR History" message="Your submitted reports will appear here." />;
+  if (mode === 'UAT') return canonicalIdentity ? <CanonicalHistory identity={canonicalIdentity} /> : <EmptyState title="DEUR History" message="Sign in to load your submitted reports." />;
 
   const allHistory = mockRepository.getDeurHistory(operator.id);
   const filtered = search.trim()

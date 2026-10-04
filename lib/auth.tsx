@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { mockRepository } from './mockRepository';
 import type { Operator } from './types';
-import type { CanonicalActivity, CanonicalCommandResult, CanonicalMeterEvidence, CanonicalOperatorWork } from './canonical/contracts.generated';
+import type { CanonicalActivity, CanonicalCommandResult, CanonicalMeterEvidence, CanonicalOperatorWork, CanonicalSessionIdentity } from './canonical/contracts.generated';
 import { mobileRuntime as runtime } from './canonical/runtime';
 import { CanonicalAuthenticationError } from './canonical/authentication';
 import { canonicalConnectivityProbeUrl, probeCanonicalConnectivity, useConnectivity } from './useConnectivity';
@@ -15,6 +15,7 @@ export type UatSessionState = 'INITIALIZING' | 'ONLINE_AUTHENTICATED' | 'OFFLINE
 
 interface AuthContextValue {
   operator: Operator | null | undefined;
+  canonicalIdentity: CanonicalSessionIdentity | null;
   canonicalWork: CanonicalOperatorWork | null;
   canonicalWorks: CanonicalOperatorWork[];
   canonicalDeurWorks: CanonicalOperatorWork[];
@@ -116,6 +117,7 @@ function clearPendingDeurId(): void {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [operator, setOperator] = useState<Operator | null | undefined>(runtime.environment.mode === 'UAT' ? undefined : loadSession());
+  const [canonicalIdentity, setCanonicalIdentity] = useState<CanonicalSessionIdentity | null>(null);
   const [canonicalWork, setCanonicalWork] = useState<CanonicalOperatorWork | null>(null);
   const [canonicalWorks, setCanonicalWorks] = useState<CanonicalOperatorWork[]>([]);
   const [canonicalDeurWorks, setCanonicalDeurWorks] = useState<CanonicalOperatorWork[]>([]);
@@ -205,12 +207,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const applyCanonicalSession = async (authenticated: Awaited<ReturnType<NonNullable<typeof runtime.authentication>['restoreSession']>>) => {
-    if (!authenticated || !runtime.workRepository) { setOperator(null); setCanonicalWorks([]); setCanonicalDeurWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); return false; }
+    if (!authenticated || !runtime.workRepository) { setOperator(null); setCanonicalIdentity(null); setCanonicalWorks([]); setCanonicalDeurWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); return false; }
     lastSuccessfulOnlineAuthorizationAt.current = new Date();
     const works = runtime.workRepository.getCurrentWorks ? await runtime.workRepository.getCurrentWorks(authenticated.identity) : await runtime.workRepository.getCurrentWork(authenticated.identity).then(value=>value?[value]:[]);
     const returnDayWorks=runtime.workRepository.getDeurEligibleWorks?await runtime.workRepository.getDeurEligibleWorks(authenticated.identity):[];
     const deurWorks=[...works,...returnDayWorks.filter(candidate=>!works.some(current=>current.rentalLine.id===candidate.rentalLine.id))];const work=works.length===1?works[0]:null;const selected=deurWorks.length===1?deurWorks[0]:work;
-    setCanonicalWorks(works); setCanonicalDeurWorks(deurWorks); setSelectedCanonicalWork(selected); setCanonicalWork(work); setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: authenticated.session.user.email ?? authenticated.identity.authUserId, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false }); setPendingDeurId(selected?.openDeur?.id ?? null);
+    setCanonicalIdentity(authenticated.identity); setCanonicalWorks(works); setCanonicalDeurWorks(deurWorks); setSelectedCanonicalWork(selected); setCanonicalWork(work); setOperator({ id: authenticated.identity.operatorId, name: authenticated.identity.operatorName, loginName: authenticated.session.user.email ?? authenticated.identity.authUserId, initials: authenticated.identity.operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false }); setPendingDeurId(selected?.openDeur?.id ?? null);
     await persistOfflineContinuation(selected);
     hydrateTurnoverTargets(works);
     return true;
@@ -222,7 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (restored.kind !== 'eligible' && restored.kind !== 'expired') return false;
     const { snapshot, work } = restored;
     setOfflineContinuationSnapshot(snapshot);
-    setCanonicalWorks([work]); setCanonicalDeurWorks([work]); setSelectedCanonicalWork(work); setCanonicalWork(work); setPendingDeurId(work.openDeur?.id ?? null);
+    setCanonicalIdentity(work.identity); setCanonicalWorks([work]); setCanonicalDeurWorks([work]); setSelectedCanonicalWork(work); setCanonicalWork(work); setPendingDeurId(work.openDeur?.id ?? null);
     setOperator({ id: snapshot.operatorId, name: snapshot.operatorDisplayName, loginName: snapshot.applicationUserId, initials: snapshot.operatorDisplayName.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(), isReliever: false });
     setUatSessionState(restored.kind === 'eligible' ? 'OFFLINE_CONTINUATION' : 'OFFLINE_EXPIRED');
     return true;
@@ -233,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const finishSignedOut = (reason: string, online: boolean) => {
       if (cancelled) { console.info('AUTH_INIT_RESULT_IGNORED_CANCELLED', JSON.stringify({ reason })); return; }
-      setOperator(null); setCanonicalWorks([]); setCanonicalDeurWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); setRequiresOnlineFirstSignIn(!online); setUatSessionState('SIGNED_OUT');
+      setOperator(null); setCanonicalIdentity(null); setCanonicalWorks([]); setCanonicalDeurWorks([]); setCanonicalWork(null); setSelectedCanonicalWork(null); setRequiresOnlineFirstSignIn(!online); setUatSessionState('SIGNED_OUT');
       console.info('AUTH_INIT_SET_OPERATOR', JSON.stringify({ value: 'null' }));
       console.info('AUTH_INIT_SET_STATE', JSON.stringify({ state: 'SIGNED_OUT', reason }));
     };
@@ -376,6 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (runtime.environment.mode === 'UAT') void runtime.authentication?.signOut();
     if (runtime.environment.mode === 'UAT') void runtime.offlineContinuation?.clear();
     setOperator(null);
+    setCanonicalIdentity(null);
     setCanonicalWork(null); setCanonicalWorks([]); setCanonicalDeurWorks([]); setSelectedCanonicalWork(null);
     setPendingDeurId(null);
     setOfflineContinuationSnapshot(null);
@@ -510,7 +513,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const selectCanonicalWork = (rentalEquipmentLineId:string) => { const work=canonicalDeurWorks.find(item=>item.rentalLine.id===rentalEquipmentLineId) ?? null; setSelectedCanonicalWork(work); setPendingDeurId(work?.openDeur?.id ?? null); };
   return (
-    <AuthContext.Provider value={{ operator, canonicalWork, canonicalWorks, canonicalDeurWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, requiresOnlineFirstSignIn, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, scenario8Replay: scenario8HarnessRef.current.state(runtime.environment, selectedCanonicalWork??canonicalWork), replayScenario8Terminal, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalIdentity, canonicalWork, canonicalWorks, canonicalDeurWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, requiresOnlineFirstSignIn, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, scenario8Replay: scenario8HarnessRef.current.state(runtime.environment, selectedCanonicalWork??canonicalWork), replayScenario8Terminal, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
       {children}
     </AuthContext.Provider>
   );
