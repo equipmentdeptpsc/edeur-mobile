@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "android": {
       "package": "com.pscequipment.edeur",
-      "versionCode": 17
+      "versionCode": 19
     },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
