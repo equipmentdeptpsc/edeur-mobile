@@ -8,5 +8,5 @@ const checks=[
  [repo.includes('sort((a,b)=>a.rental.rentalNumber'),'deterministic work ordering'],
  [auth.includes('canonicalWorks')&&auth.includes('selectedCanonicalWork')&&auth.includes('selectCanonicalWork'),'auth context stores selectable work list'],
  [auth.includes('rentalLine.id===rentalEquipmentLineId'),'selection is keyed by Rental Equipment Line ID'],
- [panel.includes('canonicalWorks.length > 1')&&panel.includes('selectCanonicalWork(item.rentalLine.id)'),'multiple work items require explicit selection'],
+ [panel.includes('canonicalDeurWorks.length > 1')&&panel.includes('selectCanonicalWork(item.rentalLine.id)'),'multiple DEUR-eligible work items require explicit selection'],
 ]; let failed=0; for(const [ok,label] of checks){console.log(`${ok?'PASS':'FAIL'}: ${label}`);if(!ok)failed++;} process.exitCode=failed?1:0;
