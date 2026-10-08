@@ -34,7 +34,11 @@ export class CanonicalAuthenticationRepository {
     return { session, identity };
   }
 
-  async signOut(): Promise<void> { await this.client.auth.signOut(); }
+  async signOut(): Promise<void> {
+    // Local sign-out works offline and removes the persisted Supabase session.
+    const { error } = await this.client.auth.signOut({ scope: 'local' });
+    if (error) throw error;
+  }
 
   async restoreSession(): Promise<CanonicalAuthenticationResult | null> {
     const session = await this.initialSession();

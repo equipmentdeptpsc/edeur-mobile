@@ -99,7 +99,7 @@ assert.match(auth, /setCanonicalIdentity\(authenticated\.identity\)[\s\S]*setCan
 assert.match(auth, /setCanonicalIdentity\(work\.identity\)/, 'offline restore also sets identity');
 assert.match(auth, /const finishSignedOut[\s\S]*?setCanonicalIdentity\(null\)/, 'signed-out path clears identity');
 assert.match(auth, /const logout[\s\S]*?setCanonicalIdentity\(null\)/, 'logout clears identity');
-assert.match(auth, /restoreSession\(\)[\s\S]*applyCanonicalSession\(session\)/, 'persisted session feeds identity restore');
+assert.match(auth, /restoreSession\(\)[\s\S]*applyCanonicalSession\(session, generation\)/, 'persisted session feeds identity restore');
 assert.match(authentication, /INITIAL_SESSION[\s\S]*resolveIdentity\(authUserId/, 'session restoration resolves canonical identity');
 assert.match(client, /storage: AsyncStorage, persistSession: true/, 'Android session remains persisted');
 assert.match(repository, /async getDeurHistory\(identity:CanonicalSessionIdentity\)[\s\S]*?\.eq\('operator_id',identity\.operatorId\)/, 'history remains operator scoped');

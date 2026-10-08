@@ -24,7 +24,7 @@ const checks = [
   ['offline continuation restores only a bounded saved snapshot', /restoreOfflineContinuation/.test(auth) && /OFFLINE_CONTINUATION/.test(auth)],
   ['accepted Start DEUR persists its canonical response before the follow-up work refresh', /runCanonical\('start',[\s\S]*?async \(accepted\)[\s\S]*?activeActivity: 'operation'[\s\S]*?persistOfflineContinuation\(startedWork\)[\s\S]*?refreshCanonicalWork/.test(auth)],
   ['continuation writes retain the timestamp from a genuine successful online authorization', /applyCanonicalSession[\s\S]*?lastSuccessfulOnlineAuthorizationAt\.current = new Date\(\)/.test(auth) && /persistOfflineContinuation[\s\S]*?offlineContinuation\.save\(work, authorizationAt\)/.test(auth)],
-  ['reconnect revalidates before it replays the durable outbox', /restoreSession\(\)[\s\S]*applyCanonicalSession\(session\)[\s\S]*replayOffline\(true\)/.test(auth)],
+  ['reconnect revalidates before it replays the durable outbox', /restoreSession\(\)[\s\S]*applyCanonicalSession\(session, generation\)[\s\S]*replayOffline\(true\)/.test(auth)],
   ['restored sessions redirect from login to the public Home path', /if \(operator\) router\.replace\('\/home'\)/.test(login)],
   ['a successful login redirects through the public Home path', /router\.replace\('\/home'\)/.test(login)],
   ['UAT Home pull-to-refresh invokes the canonical work refresh', /const \{ operator, canonicalWork, mode, refreshCanonicalWork \} = useAuth\(\);[\s\S]*?const onRefresh = useCallback\(async \(\) => \{[\s\S]*?mode === 'UAT'[\s\S]*?await refreshCanonicalWork\(\)/.test(home) && /function CanonicalHome[\s\S]*?refreshControl=\{<RefreshControl refreshing=\{refreshing\} onRefresh=\{onRefresh\}/.test(home)],

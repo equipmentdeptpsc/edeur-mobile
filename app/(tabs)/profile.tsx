@@ -17,6 +17,8 @@ export default function ProfileScreen() {
   const { mode, toggle, colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [showLogout, setShowLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutMessage, setLogoutMessage] = useState<string | null>(null);
 
   if (!operator) return null;
   if (runtimeMode === 'UAT' && canonicalWork) return <CanonicalProfile work={canonicalWork} />;
@@ -27,7 +29,7 @@ export default function ProfileScreen() {
   const project: any = null;
   const rental: any = null;
 
-  const handleLogout = () => { logout(); router.replace('/login'); };
+  const handleLogout = async () => { if (loggingOut) return; setLoggingOut(true); setLogoutMessage(null); if (await logout()) router.replace('/login'); else { setLoggingOut(false); setShowLogout(false); setLogoutMessage('Logout could not be saved. Try again.'); } };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: c.background }]} contentContainerStyle={[styles.content, { paddingTop: 12 + insets.top, paddingBottom: 92 + insets.bottom }]}>
@@ -115,7 +117,8 @@ export default function ProfileScreen() {
         <Text style={[styles.logoutText, { color: c.red500 }]}>Logout</Text>
       </TouchableOpacity>
 
-      <ConfirmDialog visible={showLogout} title="Logout?" message="You will be returned to the login screen. Any unsaved DEUR data will remain in the app." confirmLabel="Logout" onConfirm={handleLogout} onCancel={() => setShowLogout(false)} danger />
+      {logoutMessage?<Text accessibilityRole="alert" style={{ color: c.red500 }}>{logoutMessage}</Text>:null}
+      <ConfirmDialog visible={showLogout} title="Logout?" message="You will be returned to the login screen. Any unsaved DEUR data will remain in the app." confirmLabel={loggingOut?'Logging out…':'Logout'} onConfirm={() => void handleLogout()} onCancel={() => setShowLogout(false)} danger />
     </ScrollView>
   );
 }

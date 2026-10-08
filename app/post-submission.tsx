@@ -37,10 +37,7 @@ export default function PostSubmissionScreen() {
   const assignment = mockRepository.getAssignmentForDeur(deur.id) ?? mockRepository.getOperatorAssignment(operator.id);
   const canStartNew = assignment ? mockRepository.canStartNewDeur(operator.id) : false;
 
-  const handleLogout = () => {
-    logout();
-    router.replace('/login');
-  };
+  const handleLogout = async () => { if (await logout()) router.replace('/login'); else setShowLogout(false); };
 
   const handleStartNew = () => {
     router.replace('/deur');
@@ -125,7 +122,7 @@ export default function PostSubmissionScreen() {
         title="Logout?"
         message="You will be returned to the login screen."
         confirmLabel="Logout"
-        onConfirm={handleLogout}
+        onConfirm={() => void handleLogout()}
         onCancel={() => setShowLogout(false)}
         danger
       />

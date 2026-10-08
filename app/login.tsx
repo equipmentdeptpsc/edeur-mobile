@@ -11,7 +11,7 @@ import { Eye, EyeOff } from 'lucide-react-native';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, getLoginError, mode, configurationError, operator, requiresOnlineFirstSignIn } = useAuth();
+  const { login, getLoginError, getLogoutError, mode, configurationError, operator, requiresOnlineFirstSignIn } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState('');
@@ -19,12 +19,16 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [usePasswordCompatibility, setUsePasswordCompatibility] = useState(false);
   const [pinVisible, setPinVisible] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => getLogoutError() ?? '');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (operator) router.replace('/home');
   }, [operator, router]);
+
+  useEffect(() => {
+    if (!operator) { const logoutError = getLogoutError(); if (logoutError) setError(logoutError); }
+  }, [operator]);
 
   if (operator === undefined) return <View style={[styles.initializing, { backgroundColor: c.background }]}><ActivityIndicator size="large" color={c.blue600} /></View>;
 
