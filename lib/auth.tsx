@@ -10,6 +10,8 @@ import type { OfflineContinuationSnapshot } from './canonical/offlineContinuatio
 import { createSecureCommandId } from './canonical/secureCommandId';
 import { isDeurReadOnly } from './canonical/deurLifecycle';
 import { Scenario8ReplayHarness, type Scenario8HarnessState, type Scenario8TerminalCommand } from './canonical/uatScenario8ReplayHarness';
+import type { CanonicalTravelCheckpoint } from './canonical/travelCheckpoints';
+import type { CanonicalRefuel } from './canonical/refuels';
 
 export type UatSessionState = 'INITIALIZING' | 'ONLINE_AUTHENTICATED' | 'OFFLINE_CONTINUATION' | 'OFFLINE_EXPIRED' | 'REAUTH_REQUIRED' | 'SIGNED_OUT';
 
@@ -44,6 +46,10 @@ interface AuthContextValue {
   replayScenario8Terminal: (type: Scenario8TerminalCommand) => Promise<{ success: boolean; code?: string }>;
   initiateCanonicalTurnover: (targetOperatorId: string) => Promise<{ success: boolean; code?: string }>;
   acceptCanonicalTurnover: () => Promise<{ success: boolean; code?: string }>;
+  recordCanonicalTravelCheckpoint: (input: { odometer: number; locationName?: string; latitude?: number; longitude?: number }) => Promise<{ success: boolean; code?: string }>;
+  readCanonicalTravelCheckpoints: (deurId?: string) => Promise<{ success: boolean; code?: string; checkpoints?: CanonicalTravelCheckpoint[] }>;
+  recordCanonicalRefuel: (input: { odometer: number; liters: number; locationName?: string }) => Promise<{ success: boolean; code?: string }>;
+  readCanonicalEquipmentRefuels: (equipmentId?: string) => Promise<{ success: boolean; code?: string; refuels?: CanonicalRefuel[] }>;
   logout: () => void;
 }
 
@@ -414,6 +420,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const startCanonicalDeur: AuthContextValue['startCanonicalDeur'] = async (optional = {}) => {
     const work=selectedCanonicalWork??canonicalWork;
     if (!work || work.openDeur || !runtime.commands) return failure(work?.openDeur ? 'PRIOR_OPEN_DEUR' : work?.dailyDeur ? 'DAILY_DEUR_EXISTS' : 'NO_AUTHORIZED_WORK');
+    if (work.deurEligible !== true) return failure('RENTAL_NOT_ACTIVE');
     if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_START');
     const draftKey = 'start-draft';
     let draftId = commandIds.current.get(draftKey);
@@ -511,9 +518,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally { canonicalBusyRef.current = false; setCanonicalBusy(false); }
   };
 
+  const recordCanonicalTravelCheckpoint: AuthContextValue['recordCanonicalTravelCheckpoint'] = async (input) => {
+    const work=selectedCanonicalWork??canonicalWork; const deur=work?.openDeur;
+    if (!work || !deur || !runtime.commands) return failure('NO_OPEN_DEUR');
+    if (work.meterRequirement !== 'odometer' && work.meterRequirement !== 'both') return failure('ODOMETER_POLICY_NOT_ENABLED');
+    if (connectivity === 'offline' || uatSessionState !== 'ONLINE_AUTHENTICATED') return failure('CONNECTIVITY_REQUIRED_FOR_CHECKPOINT');
+    if (canonicalBusyRef.current) return failure('ACTION_IN_PROGRESS');
+    if (!Number.isFinite(input.odometer) || input.odometer < 0) return failure('INVALID_ODOMETER');
+    const identity=createSecureCommandId(); canonicalBusyRef.current=true; setCanonicalBusy(true);
+    try {
+      const result=await runtime.commands.recordTravelCheckpoint({ commandId:identity,idempotencyKey:identity,deurId:deur.id,operatorId:work.identity.operatorId,expectedVersion:deur.rowVersion,odometer:input.odometer,clientOccurredAt:new Date().toISOString(),...(input.locationName?.trim()?{locationName:input.locationName.trim()}:{}),...(input.latitude!==undefined?{latitude:input.latitude}:{}),...(input.longitude!==undefined?{longitude:input.longitude}:{}) });
+      if(result.success) await refreshCanonicalWork(); return result;
+    } finally { canonicalBusyRef.current=false; setCanonicalBusy(false); }
+  };
+  const readCanonicalTravelCheckpoints: AuthContextValue['readCanonicalTravelCheckpoints'] = async (deurId) => {
+    const work=selectedCanonicalWork??canonicalWork; const target=deurId??work?.openDeur?.id??work?.dailyDeur?.id;
+    if(!target||!runtime.commands)return {success:false,code:'NO_DEUR'};
+    return runtime.commands.readTravelCheckpoints(target);
+  };
+  const recordCanonicalRefuel: AuthContextValue['recordCanonicalRefuel'] = async (input) => {
+    const work=selectedCanonicalWork??canonicalWork; const deur=work?.openDeur;
+    if(!work||!deur||!runtime.commands)return failure('NO_OPEN_DEUR');
+    if(work.meterRequirement!=='odometer'&&work.meterRequirement!=='both')return failure('ODOMETER_POLICY_NOT_ENABLED');
+    if(connectivity==='offline'||uatSessionState!=='ONLINE_AUTHENTICATED')return failure('CONNECTIVITY_REQUIRED_FOR_REFUEL');
+    if(canonicalBusyRef.current||!Number.isFinite(input.odometer)||input.odometer<0||!Number.isFinite(input.liters)||input.liters<=0)return failure(canonicalBusyRef.current?'ACTION_IN_PROGRESS':'VALIDATION_REJECTED');
+    const identity=createSecureCommandId(); canonicalBusyRef.current=true; setCanonicalBusy(true);
+    try { const result=await runtime.commands.recordRefuel({commandId:identity,idempotencyKey:identity,rentalId:work.rental.id,rentalLineId:work.rentalLine.id,equipmentId:work.equipment.id,assignmentId:work.assignment.id,operatorId:work.identity.operatorId,deurId:deur.id,expectedVersion:deur.rowVersion,odometer:input.odometer,liters:input.liters,clientOccurredAt:new Date().toISOString(),...(input.locationName?.trim()?{locationName:input.locationName.trim()}: {})}); if(result.success)await refreshCanonicalWork(); return result; }
+    finally { canonicalBusyRef.current=false; setCanonicalBusy(false); }
+  };
+  const readCanonicalEquipmentRefuels: AuthContextValue['readCanonicalEquipmentRefuels'] = async (equipmentId) => {
+    const work=selectedCanonicalWork??canonicalWork; const target=equipmentId??work?.equipment.id;
+    if(!target||!runtime.commands)return {success:false,code:'NO_EQUIPMENT'};
+    return runtime.commands.readEquipmentRefuels(target);
+  };
+
   const selectCanonicalWork = (rentalEquipmentLineId:string) => { const work=canonicalDeurWorks.find(item=>item.rentalLine.id===rentalEquipmentLineId) ?? null; setSelectedCanonicalWork(work); setPendingDeurId(work?.openDeur?.id ?? null); };
   return (
-    <AuthContext.Provider value={{ operator, canonicalIdentity, canonicalWork, canonicalWorks, canonicalDeurWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, requiresOnlineFirstSignIn, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, scenario8Replay: scenario8HarnessRef.current.state(runtime.environment, selectedCanonicalWork??canonicalWork), replayScenario8Terminal, initiateCanonicalTurnover, acceptCanonicalTurnover, logout }}>
+    <AuthContext.Provider value={{ operator, canonicalIdentity, canonicalWork, canonicalWorks, canonicalDeurWorks, selectedCanonicalWork, selectCanonicalWork, pendingDeurId, mode: runtime.environment.mode, configurationError: runtime.configurationError, canonicalBusy, offlineSyncState, offlinePendingCount, uatSessionState, offlineContinuationSnapshot, requiresOnlineFirstSignIn, getLoginError:()=>loginErrorRef.current, login, loginReliever, loginMainOperator, resumeDeur, refreshCanonicalWork, startCanonicalDeur, transitionCanonicalActivity, endCanonicalShift, submitCanonicalDeur, scenario8Replay: scenario8HarnessRef.current.state(runtime.environment, selectedCanonicalWork??canonicalWork), replayScenario8Terminal, initiateCanonicalTurnover, acceptCanonicalTurnover, recordCanonicalTravelCheckpoint, readCanonicalTravelCheckpoints, recordCanonicalRefuel, readCanonicalEquipmentRefuels, logout }}>
       {children}
     </AuthContext.Provider>
   );

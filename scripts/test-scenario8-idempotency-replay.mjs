@@ -16,9 +16,10 @@ assert.match(harness, /record\.used = true/, 'replay is one shot even if transpo
 assert.match(harness, /copy\(record\.payload\)/, 'replay receives an immutable copy of the captured request');
 assert.match(repository, /prepareEndShift[\s\S]*command_complete_deur_shift/);
 assert.match(repository, /prepareSubmit[\s\S]*command_submit_deur/);
-assert.match(repository, /executeTerminal\(command:PreparedTerminalCommand\)/, 'same repository and authenticated client execute the exact prepared request');
-assert.match(auth, /capture\('END_SHIFT', runtime\.environment, canonicalWork, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'End Shift is captured immediately before normal send');
-assert.match(auth, /capture\('SUBMIT', runtime\.environment, canonicalWork, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'Submit is captured immediately before normal send');
+assert.match(repository, /executeTerminal\(command:\s*PreparedTerminalCommand\)/, 'same repository and authenticated client execute the exact prepared request');
+assert.match(repository, /recordTravelCheckpoint[\s\S]*command_record_deur_travel_checkpoint/, 'travel remains a separate canonical command and cannot alter terminal replay payloads');
+assert.match(auth, /capture\('END_SHIFT', runtime\.environment, work, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'End Shift is captured immediately before normal send');
+assert.match(auth, /capture\('SUBMIT', runtime\.environment, work, prepared\.payload\)[\s\S]*executeTerminal\(prepared\)/, 'Submit is captured immediately before normal send');
 assert.match(auth, /scenario8HarnessRef\.current\.replay[\s\S]*executeTerminal/, 'replay remains in the existing authenticated canonical client');
 assert.match(panel, /Test Tools/);
 assert.match(panel, /scenario8Replay\.enabled/, 'control is invisible unless every fixed gate passes');

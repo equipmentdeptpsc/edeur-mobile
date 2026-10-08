@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CanonicalActivity, CanonicalCommandIdentity, CanonicalCommandResult, CanonicalMeterEvidence, CanonicalOperatorWork } from './contracts.generated';
 import { createSecureCommandId } from './secureCommandId';
+import type { CanonicalTravelCheckpoint, TravelCheckpointCommandInput, TravelCheckpointResult } from './travelCheckpoints';
+import { parseCanonicalRefuel, type CanonicalRefuel, type RefuelCommandInput } from './refuels';
 type StartEvidence = CanonicalMeterEvidence & { shift?: string; operationalRemarks?: string };
 type CompleteEvidence = Pick<CanonicalMeterEvidence, 'closingHourMeter' | 'closingOdometer'> & { closingLocation?: string };
 export class CanonicalDeurCommandRepository {
@@ -14,6 +16,39 @@ export class CanonicalDeurCommandRepository {
   executeTerminal(command: PreparedTerminalCommand) { return this.execute(command.name, command.payload); }
   initiateTurnover(work: CanonicalOperatorWork, deurId: string, expectedVersion: number, targetOperatorId: string, identity: string) { return this.executeValue('command_initiate_deur_turnover', { ...commandIdentity(work, identity), deurId, expectedVersion, targetOperatorId }); }
   acceptTurnover(turnoverId: string, operatorId: string, identity: string) { return this.executeValue('command_accept_deur_turnover', { commandId: identity, idempotencyKey: identity, turnoverId, operatorId, clientCreatedAt: new Date().toISOString() }); }
+  async recordTravelCheckpoint(input: TravelCheckpointCommandInput): Promise<TravelCheckpointResult> {
+    if (!Number.isFinite(input.odometer) || input.odometer < 0) return { success: false, code: 'INVALID_ODOMETER' };
+    let response: { data: unknown; error: unknown };
+    try { response = await this.client.schema('erp').rpc('command_record_deur_travel_checkpoint', { command: input }); }
+    catch { return { success: false, code: 'TRANSPORT_FAILURE', retryable: true }; }
+    if (response.error || !isRecord(response.data)) return { success: false, code: classifyRpcError(response.error) };
+    const value = response.data;
+    if (value.success !== true) return { success: false, code: typeof value.code === 'string' ? safeResultCode(value.code) : 'RPC_REJECTED', retryable: value.retryable === true, refreshRequired: value.refreshRequired === true };
+    const checkpoint = isRecord(value.value) ? parseCheckpoint(value.value) : undefined;
+    return { success: true, checkpoint, version: typeof value.version === 'number' ? value.version : undefined, disposition: value.disposition === 'REPLAYED' ? 'REPLAYED' : 'ACCEPTED' };
+  }
+  async readTravelCheckpoints(deurId: string): Promise<{ success: true; checkpoints: CanonicalTravelCheckpoint[] } | { success: false; code: string }> {
+    let response: { data: unknown; error: unknown };
+    try { response = await this.client.schema('erp').rpc('read_deur_travel_checkpoint_history', { target_deur_id: deurId }); }
+    catch { return { success: false, code: 'TRANSPORT_FAILURE' }; }
+    if (response.error || !isRecord(response.data) || response.data.success !== true || !Array.isArray(response.data.checkpoints)) return { success: false, code: classifyRpcError(response.error) };
+    return { success: true, checkpoints: response.data.checkpoints.map(parseCheckpoint).filter((value): value is CanonicalTravelCheckpoint => Boolean(value)) };
+  }
+  async recordRefuel(input: RefuelCommandInput): Promise<{ success: boolean; code?: string; retryable?: boolean; refreshRequired?: boolean }> {
+    if (!Number.isFinite(input.odometer) || input.odometer < 0 || !Number.isFinite(input.liters) || input.liters <= 0) return { success: false, code: 'VALIDATION_REJECTED' };
+    let response: { data: unknown; error: unknown };
+    try { response = await this.client.schema('erp').rpc('command_record_deur_refuel', { command: input }); }
+    catch { return { success: false, code: 'TRANSPORT_FAILURE', retryable: true }; }
+    if (response.error || !isRecord(response.data)) return { success: false, code: classifyRpcError(response.error) };
+    const value=response.data; return value.success===true ? { success:true } : { success:false, code:typeof value.code==='string'?safeResultCode(value.code):'RPC_REJECTED', retryable:value.retryable===true, refreshRequired:value.refreshRequired===true };
+  }
+  async readEquipmentRefuels(equipmentId: string): Promise<{ success: true; refuels: CanonicalRefuel[] } | { success: false; code: string }> {
+    let response: { data: unknown; error: unknown };
+    try { response = await this.client.schema('erp').rpc('read_equipment_refuel_history', { target_equipment_id: equipmentId }); }
+    catch { return { success: false, code: 'TRANSPORT_FAILURE' }; }
+    if (response.error || !isRecord(response.data) || response.data.success !== true || !Array.isArray(response.data.refuels)) return { success:false, code:classifyRpcError(response.error) };
+    return { success:true, refuels:response.data.refuels.map(parseCanonicalRefuel).filter((row):row is CanonicalRefuel=>Boolean(row)) };
+  }
   private async execute(name: string, command: unknown): Promise<CanonicalCommandResult> { let response: { data: unknown; error: unknown }; try { response = await this.client.schema('erp').rpc(name, { command }); } catch { return { success: false, code: 'TRANSPORT_FAILURE', retryable: true }; } if (response.error) return { success: false, code: classifyRpcError(response.error), retryable: false }; if (!isRecord(response.data)) return { success: false, code: 'MALFORMED_RESPONSE' }; const value = response.data; if (value.success !== true) return { success: false, code: typeof value.code === 'string' ? safeResultCode(value.code) : 'RPC_REJECTED', retryable: value.retryable === true, refreshRequired: value.refreshRequired === true }; if (!isRecord(value.record) || typeof value.version !== 'number' || typeof value.serverOccurredAt !== 'string') return { success: false, code: 'MALFORMED_RESPONSE' }; const record = value.record; if (typeof record.id !== 'string' || typeof record.deur_number !== 'string' || typeof record.work_date !== 'string' || typeof record.status !== 'string' || typeof record.operator_id !== 'string') return { success: false, code: 'MALFORMED_RESPONSE' }; return { success: true, disposition: value.disposition === 'REPLAYED' ? 'REPLAYED' : 'ACCEPTED', version: value.version, serverOccurredAt: value.serverOccurredAt, record: { ...record, id: record.id, deurNumber: record.deur_number, workDate: record.work_date, status: record.status, operatorId: record.operator_id, rowVersion: value.version, ...(typeof record.opening_hour_meter === 'number' ? { openingHourMeter: record.opening_hour_meter } : {}), ...(typeof record.opening_odometer === 'number' ? { openingOdometer: record.opening_odometer } : {}), ...(typeof record.closing_hour_meter === 'number' ? { closingHourMeter: record.closing_hour_meter } : {}), ...(typeof record.closing_odometer === 'number' ? { closingOdometer: record.closing_odometer } : {}) } }; }
   private async executeValue(name: string, command: unknown): Promise<{ success: boolean; code?: string; disposition?: 'ACCEPTED' | 'REPLAYED' }> { const response = await this.client.schema('erp').rpc(name, { command }); if (response.error || !isRecord(response.data)) return { success: false, code: 'TRANSPORT_FAILURE' }; const value = response.data; return value.success === true ? { success: true, disposition: value.disposition === 'REPLAYED' ? 'REPLAYED' : 'ACCEPTED' } : { success: false, code: typeof value.code === 'string' ? value.code : 'PERSISTENCE_FAILURE' }; }
 }
@@ -23,6 +58,7 @@ function validateStart(work: CanonicalOperatorWork, evidence: CanonicalMeterEvid
 function actionFor(activity: CanonicalActivity): string { return ({ operation: 'START_OPERATION', idle: 'START_IDLE', standby: 'START_STANDBY', mealBreak: 'START_MEAL_BREAK', breakdown: 'START_BREAKDOWN' } as const)[activity]; }
 function safeShift(value?: string): string | undefined { const normalized = value?.trim(); return normalized && normalized.length <= 80 && !/[\u0000-\u001f\u007f]/.test(normalized) ? normalized : undefined; }
 function isRecord(value: unknown): value is Record<string, any> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
-const SAFE_CODES = new Set(['DUPLICATE_ACTIVE_DEUR', 'DEUR_ALREADY_OPEN', 'INVALID_RENTAL_STATE', 'NO_ACTIVE_ASSIGNMENT', 'INVALID_ASSIGNMENT', 'IDEMPOTENCY_MISMATCH', 'VALIDATION_REJECTED', 'DEUR_EXPECTATION_REQUIRED', 'SNAPSHOT_STALE', 'FORBIDDEN', 'UNAUTHORIZED']);
+const SAFE_CODES = new Set(['DUPLICATE_ACTIVE_DEUR', 'DEUR_ALREADY_OPEN', 'INVALID_RENTAL_STATE', 'NO_ACTIVE_ASSIGNMENT', 'INVALID_ASSIGNMENT', 'IDEMPOTENCY_MISMATCH', 'VALIDATION_REJECTED', 'DEUR_EXPECTATION_REQUIRED', 'SNAPSHOT_STALE', 'FORBIDDEN', 'UNAUTHORIZED', 'CUSTODY_REQUIRED', 'STALE_VERSION', 'NON_MONOTONIC_METER', 'INVALID_ODOMETER']);
 function safeResultCode(value: string): string { return SAFE_CODES.has(value) ? value : 'RPC_REJECTED'; }
 function classifyRpcError(error: unknown): string { if (!isRecord(error)) return 'RPC_REJECTED'; const status = typeof error.status === 'number' ? error.status : undefined; const code = typeof error.code === 'string' ? error.code.toUpperCase() : ''; if (status === 401 || code === '401' || code === 'PGRST301') return 'UNAUTHORIZED'; if (status === 403 || code === '42501') return 'FORBIDDEN'; return 'RPC_REJECTED'; }
+function parseCheckpoint(value: unknown): CanonicalTravelCheckpoint | undefined { if (!isRecord(value) || typeof value.checkpointId !== 'string' || typeof value.sequence !== 'number' || typeof value.odometer !== 'number' || typeof value.serverAcceptedAt !== 'string') return undefined; return { checkpointId: value.checkpointId, sequence: value.sequence, ...(typeof value.displayLabel === 'string' ? { displayLabel: value.displayLabel } : {}), odometer: value.odometer, ...(typeof value.clientOccurredAt === 'string' ? { clientOccurredAt: value.clientOccurredAt } : {}), serverAcceptedAt: value.serverAcceptedAt, ...(typeof value.locationName === 'string' ? { locationName: value.locationName } : {}), ...(typeof value.latitude === 'number' ? { latitude: value.latitude } : {}), ...(typeof value.longitude === 'number' ? { longitude: value.longitude } : {}), ...(typeof value.distanceFromPrevious === 'number' ? { distanceFromPrevious: value.distanceFromPrevious } : {}), ...(typeof value.custodianOperatorId === 'string' ? { custodianOperatorId: value.custodianOperatorId } : {}), source: typeof value.source === 'string' ? value.source : 'TRAVEL_ODOMETER' }; }

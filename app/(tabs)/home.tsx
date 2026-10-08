@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl, TouchableOpacity, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Truck, MapPin, FileText, ChevronRight, Wifi } from 'lucide-react-native';
@@ -16,19 +16,28 @@ import { getTotalShiftTime, getNetOperatingTime, getGrossTime, formatDurationSho
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { operator, canonicalWork, mode } = useAuth();
+  const { operator, canonicalWork, mode, refreshCanonicalWork } = useAuth();
   const { colors: c } = useTheme();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const connectivity = useConnectivity();
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
+    if (refreshing) return;
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 500);
-  }, []);
+    setRefreshMessage(null);
+    try {
+      if (mode === 'UAT' && !await refreshCanonicalWork()) setRefreshMessage('Unable to refresh. Current offline data remains available.');
+    } catch {
+      setRefreshMessage('Unable to refresh. Current offline data remains available.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [mode, refreshCanonicalWork, refreshing]);
 
   if (!operator) return null;
-  if (mode === 'UAT') return <CanonicalHome operatorName={operator.name} work={canonicalWork} colors={c} insets={insets} />;
+  if (mode === 'UAT') return <CanonicalHome operatorName={operator.name} work={canonicalWork} colors={c} insets={insets} onNavigate={(path) => router.push(path as never)} refreshing={refreshing} refreshMessage={refreshMessage} onRefresh={onRefresh} />;
 
   // Use resumable lookup for active DEUR (finds turnover-pending too)
   const activeDeur = mockRepository.getResumableDeurForOperator(operator.id);
@@ -220,10 +229,11 @@ export default function HomeScreen() {
   );
 }
 
-function CanonicalHome({operatorName,work,colors:c,insets}:{operatorName:string;work:import('@/lib/canonical/contracts.generated').CanonicalOperatorWork|null;colors:ReturnType<typeof useTheme>['colors'];insets:{top:number;bottom:number}}){
- return <ScrollView style={[styles.container,{backgroundColor:c.background}]} contentContainerStyle={[styles.content,{paddingTop:spacing.lg+insets.top,paddingBottom:spacing.xxxl+insets.bottom}]}>
-  <View style={styles.header}><View><Text style={[styles.greeting,{color:c.textMuted}]}>Current Assignment</Text><Text style={[styles.operatorName,{color:c.textPrimary}]}>{operatorName}</Text></View><View style={[styles.syncBadge,{backgroundColor:c.emerald50}]}><Wifi size={14} color={c.emerald500}/><Text style={[styles.syncText,{color:c.emerald500}]}>Online</Text></View></View>
-  {work?<><Text style={[styles.sectionLabel,{color:c.textMuted}]}>{work.custody?.turnoverStatus==='PENDING'?'PENDING HANDOVER':'CURRENT WORK'}</Text><Card style={styles.assignmentCard}><Text style={[styles.equipmentName,{color:c.textPrimary}]}>{work.equipment.name}</Text><Text style={[styles.assetNumber,{color:c.textMuted}]}>{work.equipment.assetNumber}</Text><Text style={[styles.detailText,{color:c.textSecondary}]}>{work.rental.rentalNumber}</Text>{work.custody?.turnoverStatus==='PENDING'?<Text style={[styles.detailText,{color:c.amber500}]}>Turnover pending acceptance</Text>:<Text style={[styles.detailText,{color:c.textSecondary}]}>Assignment: {work.assignment.status}</Text>}</Card>{work.openDeur?<Card style={{...styles.openDeurCard,borderColor:c.blue600}}><View style={styles.openDeurHeader}><View style={{flex:1}}><Text style={[styles.openDeurEyebrow,{color:c.blue600}]}>{work.custody?.turnoverStatus==='PENDING'?'PENDING HANDOVER':'OPEN DEUR'}</Text><Text style={[styles.openDeurNumber,{color:c.textPrimary}]}>{work.openDeur.deurNumber}</Text></View><StatusChip label={work.openDeur.status.toUpperCase()} variant="blue" /></View><Text style={[styles.openDeurMeta,{color:c.textSecondary}]}>Work date · {work.openDeur.workDate}</Text><Text style={[styles.openDeurMeta,{color:c.textMuted}]}>Tap DEUR to continue this shift</Text></Card>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No open DEUR.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Open the Digital DEUR tab to start work.</Text></Card>}</>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No current assignment found.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Contact your supervisor to get assigned to equipment.</Text></Card>}
+function CanonicalHome({operatorName,work,colors:c,insets,onNavigate,refreshing,refreshMessage,onRefresh}:{operatorName:string;work:import('@/lib/canonical/contracts.generated').CanonicalOperatorWork|null;colors:ReturnType<typeof useTheme>['colors'];insets:{top:number;bottom:number};onNavigate:(path:string)=>void;refreshing:boolean;refreshMessage:string|null;onRefresh:()=>void}){
+ return <ScrollView style={[styles.container,{backgroundColor:c.background}]} contentContainerStyle={[styles.content,{paddingTop:spacing.lg+insets.top,paddingBottom:spacing.xxxl+insets.bottom}]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+  <View style={styles.header}><View><Text style={[styles.greeting,{color:c.textMuted}]}>Current Assignment</Text><Text style={[styles.operatorName,{color:c.textPrimary}]}>{operatorName}</Text></View><Button label={refreshing?'REFRESHING…':'REFRESH'} variant="secondary" disabled={refreshing} onPress={onRefresh}/></View>
+  {refreshMessage?<Text style={[styles.detailText,{color:c.amber500}]}>{refreshMessage}</Text>:null}
+  {work?<><Text style={[styles.sectionLabel,{color:c.textMuted}]}>CURRENT ASSIGNMENT</Text><Card style={styles.assignmentCard}><Text style={[styles.equipmentName,{color:c.textPrimary}]}>{work.equipment.name}</Text><Text style={[styles.assetNumber,{color:c.textMuted}]}>{work.equipment.assetNumber} · {work.assignment.projectName || 'Project unavailable'}</Text><Text style={[styles.detailText,{color:c.textSecondary}]}>Rental {work.rental.rentalNumber} · {work.rental.status}</Text><Text style={[styles.detailText,{color:work.deurEligible?c.emerald500:c.amber500}]}>Assignment: {work.assignment.status}{work.custody?.turnoverStatus==='PENDING'?' · Turnover pending':''}</Text>{!work.deurEligible?<Text style={[styles.detailText,{color:c.amber500}]}>DEUR becomes available when the rental is activated.</Text>:null}</Card>{work.openDeur?<Pressable accessibilityRole="button" accessibilityLabel="Continue DEUR" onPress={()=>onNavigate('/deur')}><Card style={{...styles.openDeurCard,borderColor:c.amber500}}><View style={styles.openDeurHeader}><View style={{flex:1}}><Text style={[styles.openDeurEyebrow,{color:c.amber500}]}>CURRENT DEUR</Text><Text style={[styles.openDeurNumber,{color:c.textPrimary}]}>{work.openDeur.deurNumber}</Text></View><StatusChip label={work.openDeur.status.toUpperCase()} variant="amber" /></View><Text style={[styles.openDeurMeta,{color:c.textSecondary}]}>Work date · {work.openDeur.workDate}</Text><Button label="CONTINUE DEUR" onPress={()=>onNavigate('/deur')} /></Card></Pressable>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No open DEUR.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>{work.deurEligible?'Open the Digital DEUR tab to start work.':'DEUR becomes available when the rental is activated.'}</Text></Card>}<Text style={[styles.sectionLabel,{color:c.textMuted}]}>QUICK ACTIONS</Text><View style={styles.quickActionGrid}><Button label={work.deurEligible?'CONTINUE DEUR':'DEUR UNAVAILABLE'} variant="secondary" disabled={!work.deurEligible} onPress={()=>onNavigate('/deur')} /><Button label="TRAVEL CHECKPOINTS" variant="secondary" disabled={!work.openDeur} onPress={()=>work.openDeur&&onNavigate(`/deur-travel/${work.openDeur.id}`)} /><Button label="REFUEL" variant="secondary" disabled={!work.openDeur} onPress={()=>work.openDeur&&onNavigate(`/deur-refuel/${work.openDeur.id}`)} /><Button label="HISTORY" variant="secondary" onPress={()=>onNavigate('/history')} /></View></>:<Card style={styles.noAssignment}><Text style={[styles.noAssignmentText,{color:c.textPrimary}]}>No current assignment found.</Text><Text style={[styles.noAssignmentSub,{color:c.textMuted}]}>Contact your supervisor to get assigned to equipment.</Text></Card>}
  </ScrollView>;
 }
 
@@ -241,6 +251,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  quickActionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   greeting: {
     fontFamily: fonts.regular,
     fontSize: 14,

@@ -5,6 +5,8 @@ import type { CanonicalDeurEvent, CanonicalOpenDeur, CanonicalOperatorWork } fro
 import { Card } from './Card';
 import { StatusChip } from './StatusChip';
 import { spacing, radius } from '@/lib/theme';
+import { formatDuration } from '@/lib/utils';
+import { deriveCanonicalActivityDurations } from '@/lib/canonical/activityDurations';
 
 type Props = {
   work: CanonicalOperatorWork;
@@ -13,6 +15,8 @@ type Props = {
   primaryOperatorDisplayName: string;
   currentOperatorDisplayName: string;
   onClose: () => void;
+  onTravel?: () => void;
+  onRefuel?: () => void;
 };
 
 const activityLabel = (activity: CanonicalDeurEvent['activity']) => activity === 'shift' ? 'Shift' : ({
@@ -21,20 +25,14 @@ const activityLabel = (activity: CanonicalDeurEvent['activity']) => activity ===
 const actionLabel = (action: CanonicalDeurEvent['action']) => action === 'start' ? 'started' : 'ended';
 const timeLabel = (value?: string) => value ? new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
 const dateTimeLabel = (value?: string) => value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
-const minutesLabel = (minutes?: number) => minutes === undefined ? '—' : `${minutes} min`;
-
-function durationMinutes(deur: CanonicalOpenDeur) {
-  if (!deur.startedAt) return undefined;
-  const end = deur.endedAt ? new Date(deur.endedAt).getTime() : Date.now();
-  return Math.max(0, Math.round((end - new Date(deur.startedAt).getTime()) / 60000));
-}
+const minutesLabel = (minutes?: number) => minutes === undefined ? '—' : formatDuration(minutes * 60000);
 
 function meterRequirementLabel(requirement: CanonicalOperatorWork['meterRequirement']) {
   return requirement === 'hourMeter' ? 'Hour meter' : requirement === 'odometer' ? 'Odometer' : requirement === 'both' ? 'Hour meter + odometer' : 'Not required';
 }
 
-export function CanonicalDeurDetailsSheet({ work, deur, colors: c, primaryOperatorDisplayName, currentOperatorDisplayName, onClose }: Props) {
-  const duration = durationMinutes(deur);
+export function CanonicalDeurDetailsSheet({ work, deur, colors: c, primaryOperatorDisplayName, currentOperatorDisplayName, onClose, onTravel, onRefuel }: Props) {
+  const derived = deriveCanonicalActivityDurations(deur.events);
   const turnoverStatus = work.custody?.turnoverStatus === 'PENDING' ? 'Pending acceptance' : work.custody?.turnoverStatus === 'ACCEPTED' ? 'Accepted' : 'No active turnover';
   return <Modal visible animationType="slide" transparent onRequestClose={onClose}>
     <View style={styles.modalRoot}>
@@ -55,33 +53,38 @@ export function CanonicalDeurDetailsSheet({ work, deur, colors: c, primaryOperat
             <DetailRow label="Assignment status" value={work.assignment.status} colors={c} />
           </Section>
           <Section title="Operator / custody" colors={c}>
-            <DetailRow label="Primary operator" value={primaryOperatorDisplayName} colors={c} />
-            <DetailRow label="Current operator" value={currentOperatorDisplayName} colors={c} />
+            <DetailRow label="Assignment operator" value={primaryOperatorDisplayName} colors={c} />
+            <DetailRow label="Custody holder" value={work.custody ? currentOperatorDisplayName : 'No turnover custody'} colors={c} />
             <DetailRow label="Turnover" value={turnoverStatus} colors={c} />
           </Section>
           <Section title="Shift summary" colors={c}>
             <DetailRow label="Started" value={dateTimeLabel(deur.startedAt)} colors={c} />
             <DetailRow label="Ended" value={dateTimeLabel(deur.endedAt)} colors={c} />
-            <DetailRow label="Duration" value={minutesLabel(duration)} colors={c} />
-            <DetailRow label="Operating" value={minutesLabel(deur.totalOperatingMinutes)} colors={c} />
-            <DetailRow label="Idle" value={minutesLabel(deur.totalIdleMinutes)} colors={c} />
-            <DetailRow label="Standby" value={minutesLabel(deur.totalStandbyMinutes)} colors={c} />
-            <DetailRow label="Meal break" value={minutesLabel(deur.totalMealBreakMinutes)} colors={c} />
-            <DetailRow label="Breakdown" value={minutesLabel(deur.totalMaintenanceMinutes)} colors={c} />
+            <DetailRow label="Duration" value={minutesLabel(derived.shiftMinutes)} colors={c} />
+            <DetailRow label="Operating" value={minutesLabel(derived.operatingMinutes)} colors={c} />
+            <DetailRow label="Idle" value={minutesLabel(derived.idleMinutes)} colors={c} />
+            <DetailRow label="Standby" value={minutesLabel(derived.standbyMinutes)} colors={c} />
+            <DetailRow label="Meal break" value={minutesLabel(derived.mealBreakMinutes)} colors={c} />
+            <DetailRow label="Breakdown" value={minutesLabel(derived.breakdownMinutes)} colors={c} />
           </Section>
           <Section title="Meter" colors={c}>
             <DetailRow label="Meter type" value={meterRequirementLabel(work.meterRequirement)} colors={c} />
-            {work.meterRequirement === 'hourMeter' || work.meterRequirement === 'both' ? <><DetailRow label="Opening hour meter" value={deur.openingHourMeter === undefined ? 'Not recorded' : String(deur.openingHourMeter)} colors={c} /><DetailRow label="Closing hour meter" value={deur.closingHourMeter === undefined ? 'Not recorded' : String(deur.closingHourMeter)} colors={c} /></> : null}
+            {deur.openingHourMeter !== undefined || deur.closingHourMeter !== undefined ? <><DetailRow label="Legacy opening hour meter" value={deur.openingHourMeter === undefined ? 'Not recorded' : String(deur.openingHourMeter)} colors={c} /><DetailRow label="Legacy closing hour meter" value={deur.closingHourMeter === undefined ? 'Not recorded' : String(deur.closingHourMeter)} colors={c} /></> : null}
             {work.meterRequirement === 'odometer' || work.meterRequirement === 'both' ? <><DetailRow label="Opening odometer" value={deur.openingOdometer === undefined ? 'Not recorded' : String(deur.openingOdometer)} colors={c} /><DetailRow label="Closing odometer" value={deur.closingOdometer === undefined ? 'Not recorded' : String(deur.closingOdometer)} colors={c} /></> : null}
             {deur.legacyMeterEvidenceState === 'AMBIGUOUS_GENERIC_DUAL_METER' ? <Text style={[styles.warning, { color: c.amber500, backgroundColor: c.amber50 }]}>Historical record: generic meter evidence cannot be reliably assigned to hour meter versus odometer.</Text> : null}
           </Section>
           <Section title="Remarks" colors={c}><Text style={{ color: c.textSecondary }}>{deur.operationalRemarks?.trim() || 'No remarks recorded.'}</Text></Section>
           <Section title="Activity timeline" colors={c}>
-            {deur.events?.length ? deur.events.map(event => <View key={event.id} style={styles.timelineRow}><View style={[styles.timelineDot, { backgroundColor: c.blue600 }]} /><View style={{ flex: 1 }}><Text style={[styles.timelineTitle, { color: c.textPrimary }]}>{activityLabel(event.activity)} {actionLabel(event.action)}</Text><Text style={{ color: c.textMuted }}>{timeLabel(event.occurredAt)} · Event {event.sequence}</Text></View></View>) : <Text style={{ color: c.textMuted }}>No activity events recorded.</Text>}
+            {deur.events?.length ? deur.events.slice(-5).reverse().map(event => <View key={event.id} style={styles.timelineRow}><View style={[styles.timelineDot, { backgroundColor: c.blue600 }]} /><View style={{ flex: 1 }}><Text style={[styles.timelineTitle, { color: c.textPrimary }]}>{activityLabel(event.activity)} {actionLabel(event.action)}</Text><Text style={{ color: c.textMuted }}>{timeLabel(event.occurredAt)} · Event {event.sequence}</Text></View></View>) : <Text style={{ color: c.textMuted }}>No activity events recorded.</Text>}
           </Section>
           <Section title="Turnover" colors={c}>
             <StatusChip label={turnoverStatus} variant={work.custody?.turnoverStatus === 'PENDING' ? 'amber' : work.custody?.turnoverStatus === 'ACCEPTED' ? 'emerald' : 'slate'} />
             <Text style={{ color: c.textMuted }}>Turnover actions remain on the canonical DEUR surface.</Text>
+          </Section>
+          <Section title="Quick links" colors={c}>
+            {onTravel ? <Pressable accessibilityRole="button" accessibilityLabel="Open travel checkpoints" onPress={onTravel} style={styles.linkRow}><Text style={{ color: c.textPrimary }}>Travel checkpoints</Text><Text style={{ color: c.blue600 }}>›</Text></Pressable> : null}
+            {onRefuel ? <Pressable accessibilityRole="button" accessibilityLabel="Open refuel input" onPress={onRefuel} style={styles.linkRow}><Text style={{ color: c.textPrimary }}>Refuel input</Text><Text style={{ color: c.amber500 }}>›</Text></Pressable> : null}
+            <Pressable accessibilityRole="button" accessibilityLabel="Close DEUR details" onPress={onClose} style={styles.linkRow}><Text style={{ color: c.textPrimary }}>Close details</Text><Text style={{ color: c.textMuted }}>×</Text></Pressable>
           </Section>
         </ScrollView>
       </View>
@@ -113,4 +116,5 @@ const styles = StyleSheet.create({
   timelineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingVertical: spacing.xs },
   timelineDot: { width: 9, height: 9, borderRadius: 5, marginTop: 4 },
   timelineTitle: { fontFamily: 'Manrope-SemiBold' },
+  linkRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#94a3b833' },
 });

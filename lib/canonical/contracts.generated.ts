@@ -68,10 +68,11 @@ export interface CanonicalDeurHistoryRecord extends CanonicalOpenDeur {
 
 export interface CanonicalOperatorWork {
   identity: CanonicalSessionIdentity;
-  assignment: { id: string; projectId: string; status: string };
+  assignment: { id: string; projectId: string; projectName?: string; status: string; operatorDisplayName?: string };
   equipment: { id: string; name: string; assetNumber: string; currentReading?: number };
   rental: { id: string; rentalNumber: string; status: string; billingMethod?: string };
   rentalLine: { id: string; status: string; operationalMetadata: Record<string, unknown> };
+  deurEligible?: boolean;
   deurEligibility?: { kind: 'PENDING_RETURN_DAY'; workDate: string; state: 'PENDING' | 'IN_PROGRESS' };
   meterRequirement?: CanonicalMeterRequirement;
   custody?: { primaryOperatorId: string; primaryOperatorDisplayName?: string; currentAuthorizedOperatorId: string; currentAuthorizedOperatorDisplayName?: string; turnoverId?: string; turnoverToOperatorId?: string; turnoverStatus: 'PENDING' | 'ACCEPTED' };

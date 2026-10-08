@@ -43,12 +43,12 @@ const lightColors: ThemeColors = {
 };
 
 const darkColors: ThemeColors = {
-  background: '#0f172a', textPrimary: '#f1f5f9', textSecondary: '#cbd5e1', textMuted: '#94a3b8',
-  surface: '#1e293b', surfaceBorder: '#334155', inputBg: '#1e293b', inputBorder: '#475569', inputFocusBorder: '#3b82f6',
-  dangerBg: '#450a0a', overlay: 'rgba(0,0,0,0.6)',
-  blue50: '#172554', blue100: '#1e3a8a', blue200: '#1d4ed8', blue500: '#3b82f6', blue600: '#3b82f6', blue700: '#60a5fa',
-  emerald50: '#052e2b', emerald500: '#10b981',
-  amber50: '#422006', amber100: '#713f12', amber500: '#f59e0b',
+  background: '#080d12', textPrimary: '#f8fafc', textSecondary: '#cbd5e1', textMuted: '#94a3b8',
+  surface: '#111b25', surfaceBorder: '#2d4053', inputBg: '#131f2a', inputBorder: '#40566f', inputFocusBorder: '#fbbf24',
+  dangerBg: '#2e141a', overlay: 'rgba(0,0,0,0.72)',
+  blue50: '#10243a', blue100: '#173b62', blue200: '#285e90', blue500: '#53a9f5', blue600: '#53a9f5', blue700: '#90c8ff',
+  emerald50: '#0d2b24', emerald500: '#38d996',
+  amber50: '#332609', amber100: '#60470b', amber500: '#fbbf24',
   red50: '#450a0a', red500: '#f87171',
   indigo50: '#312e81', indigo500: '#818cf8',
   slate50: '#0f172a', slate100: '#1e293b', slate200: '#334155', slate300: '#475569', slate400: '#64748b',
